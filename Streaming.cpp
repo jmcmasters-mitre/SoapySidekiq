@@ -13,7 +13,10 @@ std::vector<std::string> SoapySidekiq::getStreamFormats(
     SoapySDR_logf(SOAPY_SDR_TRACE, "getStreamFormats");
     std::vector<std::string> formats;
     formats.push_back(SOAPY_SDR_CS16);
-    formats.push_back(SOAPY_SDR_CF32);
+    if (direction == SOAPY_SDR_RX)
+    { 
+        formats.push_back(SOAPY_SDR_CF32);
+    }
     return formats;
 }
 
@@ -297,7 +300,7 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int          direction,
         {
             throw std::runtime_error(
                 "setupStream invalid format '" + format +
-                "' -- Only CS16 or CF32 is supported by SoapySidekiq module.");
+                "' -- Only CS16 is supported by SoapySidekiq TX module.");
         }
 
         // Allocate buffers
