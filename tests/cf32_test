@@ -46,7 +46,7 @@ def main(cardno, rx_chan, fs, bw, freq):
 
     # create a re-usable buffer for receiving samples
     N = sdr.getStreamMTU(rx_stream)
-    print("Stream MTU",  nb)
+    print("Stream MTU",  N)
 
     #determine max value based upon resolution
     max_value = sdr.readSetting("max_value")

@@ -36,7 +36,7 @@ def main(cardno, rx_chan, fs, bw, freq):
 
     sdr.setSampleRate(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
     sdr.setBandwidth(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
-    sdr.setGainMode(SOAPY_SDR_RX, rx_chan, use_agc)       # Set the gain mode
+    #sdr.setGainMode(SOAPY_SDR_RX, rx_chan, use_agc)       # Set the gain mode
     sdr.setFrequency(SOAPY_SDR_RX, rx_chan, freq)         # Tune the LO
 
     # Create data buffer and start streaming samples to it
@@ -71,14 +71,14 @@ def main(cardno, rx_chan, fs, bw, freq):
 
     for i in range(NUM_BUFF):
         print("analyze block", i)
-        print(rx_buff[i])
+        #print(rx_buff[i])
         expected = np.int16(rx_buff[i][0])
         #validate samples
         for j in range(((2 * N) - 1)):
             this_value = np.int16(rx_buff[i][j])
 
             if (this_value != expected):
-                print(rx_buff[i])
+                #print(rx_buff[i])
                 print("bad value", j, "expected", expected, "value", this_value)
 
                 #error print the buffer around the error
