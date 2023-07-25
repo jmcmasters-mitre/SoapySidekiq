@@ -2,8 +2,8 @@
 
 import sys
 import time
+import argparse
 import numpy as np
-from matplotlib import pyplot as plt
 import SoapySDR
 print(SoapySDR, __file__)
 from SoapySDR import *
@@ -16,85 +16,127 @@ np.set_printoptions(threshold=sys.maxsize)
 # Data transfer settings
 NUM_BUFF = 10
 rx_chan = 0             # RX1 = 0, RX2 = 1
-fs = 10e6            # Radio sample Rate
-freq = 100e6            # LO tuning frequency in Hz
 use_agc = False          # Use or don't use the AGC
 timeout_us = int(10e6)
-rx_resolution = 12
-max_data = (1 << (rx_resolution -1))-1
-print(max_data)
-SCALE = max_data + 1
 
 ############################################################################################
 # Receive Signal
 ############################################################################################
-sdr = SoapySDR.Device() 
-SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
+def main(cardno, rx_chan, fs, bw, freq):
+    global running, sdr, rx_stream
 
-sdr.writeSetting("counter", "true")
-setting = sdr.readSetting("counter")
-print("read counter", setting)
+    args = dict(card = cardno)
+    #    args = dict(serial = '8N55')
 
-sdr.setSampleRate(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
-sdr.setBandwidth(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
-#sdr.setGainMode(SOAPY_SDR_RX, rx_chan, use_agc)       # Set the gain mode
-sdr.setFrequency(SOAPY_SDR_RX, rx_chan, freq)         # Tune the LO
+    sdr = SoapySDR.Device(args)
 
-# Create data buffer and start streaming samples to it
-rx_stream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32, [rx_chan])  # Setup data stream
+    SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
 
-# create a re-usable buffer for receiving samples
-nb = sdr.getStreamMTU(rx_stream)
-print("Stream MTU set to",  nb)
+    sdr.writeSetting("counter", "true")
+    setting = sdr.readSetting("counter")
+    print("read counter", setting)
 
-N = nb
+    sdr.setSampleRate(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
+    sdr.setBandwidth(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
+    sdr.setGainMode(SOAPY_SDR_RX, rx_chan, use_agc)       # Set the gain mode
+    sdr.setFrequency(SOAPY_SDR_RX, rx_chan, freq)         # Tune the LO
 
-buff = np.empty([NUM_BUFF, N], dtype=np.csingle)
-intbuff = np.empty((N*2), dtype=np.int16)
-real = np.zeros(N, dtype=np.int16)
-imag = np.zeros(N, dtype=np.int16)
+    # Create data buffer and start streaming samples to it
+    rx_stream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32, [rx_chan])  # Setup data stream
 
-sdr.activateStream(rx_stream)  # this turns the radio on
+    # create a re-usable buffer for receiving samples
+    N = sdr.getStreamMTU(rx_stream)
+    print("Stream MTU",  nb)
 
-for idx1 in range(NUM_BUFF):
-    print("read block", idx1)
+    #determine max value based upon resolution
+    max_value = sdr.readSetting("max_value")
 
-    sr = sdr.readStream(rx_stream, [buff[idx1]], N)
+    SCALE = float(max_value)
+    max_data = int(SCALE)
+    print("max value based upon resolution", max_data)
 
-    rc = sr.ret # number of samples read or the error code
-    assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
+    buff = np.empty([NUM_BUFF, N], dtype=np.csingle)
+    intbuff = np.empty((N*2), dtype=np.int16)
+    real = np.zeros(N, dtype=np.int16)
+    imag = np.zeros(N, dtype=np.int16)
 
-sdr.deactivateStream(rx_stream)
-sdr.closeStream(rx_stream)
+    sdr.activateStream(rx_stream)  # this turns the radio on
 
-for i in range(NUM_BUFF):
-    print("analyze block", i)
+    for idx1 in range(NUM_BUFF):
+        print("read block", idx1)
 
-    real = buff[i].real * SCALE
-    imag = buff[i].imag * SCALE
+        sr = sdr.readStream(rx_stream, [buff[idx1]], N)
 
-    intbuff[0::2] = real
-    intbuff[1::2] = imag
+        rc = sr.ret # number of samples read or the error code
+        assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
 
-    expected = intbuff[0]
+    sdr.deactivateStream(rx_stream)
+    sdr.closeStream(rx_stream)
 
-    #validate samples
-    for j in range(((2 * N) - 1)):
-        this_value = intbuff[j]
+    for i in range(NUM_BUFF):
+        print("analyze block", i)
 
-        if (this_value != expected):
-            print("bad value", j, "expected", expected, "value", this_value)
+        real = buff[i].real * SCALE
+        imag = buff[i].imag * SCALE
 
-            #error print the buffer around the error
-            for k in range(-5, 5):
-                print((j + k), " ", intbuff[j+k])
-            break
+        #intbuff[0::2] = real
+        #intbuff[1::2] = imag
+        intbuff[0::2] = imag
+        intbuff[1::2] = real
 
-        expected = (this_value + 1)
-        if expected == (max_data + 1):
-            expected = -(max_data+1)
+        expected = intbuff[0]
 
-    if j >= ((2 * N - 1) - 1):
-        print(" success")
+        #validate samples
+        for j in range(((2 * N) - 1)):
+            this_value = intbuff[j]
+
+            if (this_value != expected):
+                print("bad value", j, "expected", expected, "value", this_value)
+
+                #error print the buffer around the error
+                for k in range(-5, 5):
+                    print((j + k), " ", intbuff[j+k])
+                break
+
+            expected = (this_value + 1)
+            if expected == (max_data + 1):
+                expected = -(max_data+1)
+
+        if j >= ((2 * N - 1) - 1):
+            print(" success")
+
+def parse_command_line_arguments():
+    """ Create command line options """
+    help_formatter = argparse.ArgumentDefaultsHelpFormatter
+    parser = argparse.ArgumentParser(description='Test cf32 receive ',
+                                     formatter_class=help_formatter)
+    parser.add_argument('-c', required=False, dest='card',
+                        default='0', help=' Card')
+    parser.add_argument('-chan', type=int, required=False, dest='chan',
+                        default=0, help=' Channel')
+    parser.add_argument('-s', type=float, required=False, dest='fs',
+                        default=20e6, help='Sample Rate')
+    parser.add_argument('-bw', type=float, required=False, dest='bw',
+                        default=18e6, help='Bandwidth')
+    parser.add_argument('-f', type=float, required=False, dest='freq',
+                        default=1000e6, help='Frequency')
+
+    return parser.parse_args(sys.argv[1:])
+
+
+if __name__ == '__main__':
+
+    pars = parse_command_line_arguments()
+
+    if (pars.fs <= pars.bw):
+        print("Warning: Bandwidth must be smaller than the sample rate, Setting bandwidth to 80% of sample rate.")
+
+        pars.bw = 0.8 * pars.fs
+
+    print("card (-c)\t\t:", pars.card, "\t\t\tchannel (-chan)\t\t:", pars.chan)
+    print("sample rate (-s)\t:", pars.fs/1000000, "M","\t\tbandwidth (-bw)\t\t:", pars.bw/1000000, "M")
+    print("freq (-f)\t:", pars.freq/1000000)
+
+    main(pars.card, pars.chan, pars.fs, pars.bw, pars.freq)
 
 

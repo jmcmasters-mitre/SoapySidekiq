@@ -294,9 +294,15 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int          direction,
         //  check the format only support CS16 for now
         if (format == "CS16")
         {
+            useShort = true;
             SoapySDR_log(SOAPY_SDR_INFO, "Using format CS16\n");
         }
-        else
+        else if (format == "CF32")
+        {
+            useShort = false;
+            SoapySDR_log(SOAPY_SDR_INFO, "Using format CF32\n");
+        }
+        else 
         {
             throw std::runtime_error(
                 "setupStream invalid format '" + format +
@@ -756,7 +762,6 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
 
     // Pointer to the location in the input buffer to transmit from
     char *inbuff_ptr = (char *)(buffs[0]);
-
 #ifdef debug2
     int16_t *tmp_ptr = (int16_t *)inbuff_ptr;
 
@@ -796,7 +801,41 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
                       inbuff_ptr, outbuff_ptr);
 #endif
 
-        memcpy(outbuff_ptr, inbuff_ptr, block_bytes_left);
+        // determine if we received short or float
+        if (useShort == true)
+        { // CS16
+            memcpy(outbuff_ptr, inbuff_ptr, block_bytes_left);
+            inbuff_ptr += block_bytes_left;
+        }
+        else
+        { // float
+            float *  float_inbuff = (float *)inbuff_ptr;
+            uint32_t words_left = block_bytes_left / 4;
+            uint16_t * new_outbuff = (uint16_t *)outbuff_ptr;
+
+            int short_ctr = 0;
+            for (uint32_t i = 0; i < words_left; i++)
+            {
+                new_outbuff[short_ctr + 1] = (uint16_t)(float_inbuff[short_ctr + 1] * this->max_value);
+                new_outbuff[short_ctr ] = (uint16_t)(float_inbuff[short_ctr] * this->max_value);
+#ifdef debug3
+                if (i < 1)
+                {
+
+                    printf("1 I write float %f, short %d, calc_int %f\n",
+                           float_inbuff[short_ctr], new_outbuff[short_ctr],
+                           (*(dbuff_ptr - 2) * this->max_value));
+                    printf("1 Q write %d, real %f, calc_int %f\n\n",
+                           float_inbuff[short_ctr + 1], *(dbuff_ptr - 1),
+                           (*(dbuff_ptr - 1) * this->max_value));
+                }
+#endif
+                short_ctr += 2;
+            }
+
+        }
+
+
 
         status = skiq_transmit(card, tx_hdl, p_tx_block[currTXBuffIndex], NULL);
         if (status != 0)
@@ -806,7 +845,6 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
                           status);
         }
 
-        inbuff_ptr += block_bytes_left;
         data_bytes -= block_bytes_left;
         block_bytes_left = DEFAULT_TX_BUFFER_LENGTH * 4;
 

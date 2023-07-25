@@ -11,6 +11,8 @@ import pynmea2
 
 import numpy as np
 import SoapySDR
+print(SoapySDR, __file__)
+
 from SoapySDR import *
 
 def read_gps(ser):

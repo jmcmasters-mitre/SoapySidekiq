@@ -983,6 +983,10 @@ std::string SoapySidekiq::readSetting(const std::string &key) const
     {
         return counter ? "true" : "false";
     }
+    else if (key == "max_value")
+    {
+        return std::to_string(this->max_value);
+    }
     else
     {
         SoapySDR_logf(SOAPY_SDR_WARNING, "Unknown setting '%s'", key.c_str());
