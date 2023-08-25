@@ -119,6 +119,9 @@ void SoapySidekiq::rx_receive_operation(void)
     //  skiq receive params
     skiq_rx_block_t *tmp_p_rx_block;
     uint32_t         len;
+    bool             first = true;
+    uint64_t         expected_timestamp = 0;
+
 
     // metadata
     uint64_t      overload = 0;
@@ -162,6 +165,31 @@ void SoapySidekiq::rx_receive_operation(void)
                     overload = tmp_p_rx_block->overload;
 
                     int num_words_read = (len / 4);
+
+                    // check for timestamp error
+                    if (first == false)
+                    {
+                        if( expected_timestamp != tmp_p_rx_block->rf_timestamp)
+                        {
+                            SoapySDR_log(SOAPY_SDR_WARNING,
+                                        "Detected timestamp overflow in RX Sidekiq Thread");
+                            SoapySDR_logf(SOAPY_SDR_DEBUG, "expected timestamp %lu, actual %lu",
+                                            expected_timestamp, tmp_p_rx_block->rf_timestamp);
+                            exit(1);
+                            // restart the timestamp checking
+                            first = true;
+                        }
+                        else
+                        {
+                            expected_timestamp += rx_payload_size_in_words;
+                        }
+                    }
+                    else 
+                    {
+                        first = false;
+                        expected_timestamp = tmp_p_rx_block->rf_timestamp + rx_payload_size_in_words;
+                    }
+
 
                     // copy the data out of the rx_buffer and into the ring
                     // buffers copy the header in also

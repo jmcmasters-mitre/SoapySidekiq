@@ -9,13 +9,13 @@ import SoapySDR
 print(SoapySDR, __file__)
 from SoapySDR import *
 
-np.set_printoptions(threshold=sys.maxsize)
+#np.set_printoptions(threshold=sys.maxsize)
 
 ############################################################################################
 # Settings
 ############################################################################################
 # Data transfer settings
-NUM_BUFF = 10
+NUM_BUFF = 10000
 rx_chan = 0             # RX1 = 0, RX2 = 1
 timeout_us = int(10e6)
 
@@ -42,7 +42,7 @@ def main(cardno, rx_chan, fs, bw, freq):
     # Create data buffer and start streaming samples to it
     rx_stream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, [rx_chan])  # Setup data stream
 
-    N = sdr.getStreamMTU(rx_stream)
+    N = sdr.getStreamMTU(rx_stream) * 10
 
     print("Stream MTU", N)
 
@@ -58,7 +58,7 @@ def main(cardno, rx_chan, fs, bw, freq):
 
     sdr.activateStream(rx_stream)  # this turns the radio on
     for idx1 in range(NUM_BUFF):
-        print("read block", idx1)
+        #print("read block", idx1)
 
         # Read the samples from the data buffer
         sr = sdr.readStream(rx_stream, [rx_buff[idx1]], N, timeoutUs=timeout_us)
@@ -66,33 +66,35 @@ def main(cardno, rx_chan, fs, bw, freq):
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
 
+    print("Completed Receive: ", NUM_BUFF, "blocks")
     sdr.deactivateStream(rx_stream)
 
+    expected = np.int16(rx_buff[0][0])
 
     for i in range(NUM_BUFF):
-        print("analyze block", i)
+        #print("analyze block", i, "expected", expected)
         #print(rx_buff[i])
-        expected = np.int16(rx_buff[i][0])
         #validate samples
-        for j in range(((2 * N) - 1)):
+        for j in range(((2 * N) )):
             this_value = np.int16(rx_buff[i][j])
 
             if (this_value != expected):
                 #print(rx_buff[i])
-                print("bad value", j, "expected", expected, "value", this_value)
+                print(" block: ", i, " short index", j, "expected", expected, "value", this_value)
 
                 #error print the buffer around the error
                 for k in range(-5, 5):
                     print((j + k), " ", rx_buff[i][j+k])
-                break
+                exit()
 
             expected = (this_value + 1)
             if expected == (max_data + 1):
                 expected = -(max_data+1)
 
-        if j >= ((2 * N - 1) - 1):
-            print(" success")
+        #if j >= ((2 * N - 1) - 1):
+            #print(" success")
 
+    print("All Blocks Successful ")
 
     # Stop streaming
     sdr.closeStream(rx_stream)
@@ -106,7 +108,7 @@ def parse_command_line_arguments():
                         default='0', help=' Card')
     parser.add_argument('-chan', type=int, required=False, dest='chan',
                         default=0, help=' Channel')
-    parser.add_argument('-s', type=float, required=False, dest='fs',
+    parser.add_argument('-r', type=float, required=False, dest='fs',
                         default=20e6, help='Sample Rate')
     parser.add_argument('-bw', type=float, required=False, dest='bw',
                         default=18e6, help='Bandwidth')
@@ -126,7 +128,7 @@ if __name__ == '__main__':
         pars.bw = 0.8 * pars.fs
 
     print("card (-c)\t\t:", pars.card, "\t\t\tchannel (-chan)\t\t:", pars.chan)
-    print("sample rate (-s)\t:", pars.fs/1000000, "M","\t\tbandwidth (-bw)\t\t:", pars.bw/1000000, "M")
+    print("sample rate (-r)\t:", pars.fs/1000000, "M","\t\tbandwidth (-bw)\t\t:", pars.bw/1000000, "M")
     print("freq (-f)\t:", pars.freq/1000000)
 
     main(pars.card, pars.chan, pars.fs, pars.bw, pars.freq)

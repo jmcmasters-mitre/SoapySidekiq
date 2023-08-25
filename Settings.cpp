@@ -508,30 +508,30 @@ void SoapySidekiq::setFrequency(const int direction, const size_t channel,
     if (direction == SOAPY_SDR_RX && name == "RF")
     {
         rx_center_frequency = (uint64_t)frequency;
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting rx center freq: %ld",
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting rx center freq: %lu",
                       rx_center_frequency);
-        status = skiq_write_rx_LO_freq(card, rx_hdl, rx_center_frequency);
+        status = skiq_write_rx_LO_freq(this->card, this->rx_hdl, rx_center_frequency);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
                           "Failure: skiq_write_rx_LO_freq (card %d, frequency "
-                          "%d), status %d",
-                          card, rx_center_frequency, status);
+                          "%lu), status %d",
+                          this->card, rx_center_frequency, status);
         }
     }
 
     if (direction == SOAPY_SDR_TX && name == "RF")
     {
         tx_center_frequency = (uint64_t)frequency;
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting tx center freq: %d",
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting tx center freq: %lu",
                       tx_center_frequency);
-        status = skiq_write_tx_LO_freq(card, tx_hdl, tx_center_frequency);
+        status = skiq_write_tx_LO_freq(this->card, this->tx_hdl, tx_center_frequency);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
                           "Failure: skiq_write_tx_LO_freq (card %d, frequency "
-                          "%d), status %d",
-                          card, tx_center_frequency, status);
+                          "%lu), status %d",
+                          this->card, tx_center_frequency, status);
         }
     }
 }
@@ -643,8 +643,8 @@ void SoapySidekiq::setSampleRate(const int direction, const size_t channel,
     SoapySDR_log(SOAPY_SDR_TRACE, "setSampleRate");
     if (direction == SOAPY_SDR_RX)
     {
-        rx_sample_rate = (uint32_t)rate;
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting rx sample rate: %d",
+        this->rx_sample_rate = (uint32_t)rate;
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting rx sample rate: %u",
                       rx_sample_rate);
         status = skiq_write_rx_sample_rate_and_bandwidth(
             card, rx_hdl, rx_sample_rate, rx_bandwidth);
@@ -659,7 +659,7 @@ void SoapySidekiq::setSampleRate(const int direction, const size_t channel,
 
     if (direction == SOAPY_SDR_TX)
     {
-        tx_sample_rate = (uint32_t)rate;
+        this->tx_sample_rate = (uint32_t)rate;
         SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting tx sample rate: %d",
                       tx_sample_rate);
         status = skiq_write_tx_sample_rate_and_bandwidth(
@@ -784,29 +784,30 @@ void SoapySidekiq::setBandwidth(const int direction, const size_t channel,
     {
         rx_bandwidth = (uint32_t)bw;
         status       = skiq_write_rx_sample_rate_and_bandwidth(
-            card, rx_hdl, rx_sample_rate, rx_bandwidth);
+            this->card, this->rx_hdl, this->rx_sample_rate, rx_bandwidth);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
                           "Failure: skiq_write_rx_sample_rate_and_bandwidth "
-                          "(card %d, sample_rate %d, bandwidth %d, status %d)",
-                          card, rx_sample_rate, rx_bandwidth, status);
+                          "(card %u, sample_rate %u, bandwidth %u, status %d)",
+                          this->card, this->rx_sample_rate, rx_bandwidth, status);
         }
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting rx bandwidth to %d", rx_bandwidth);
     }
-    SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting rx bandwidth to %f", bw);
 
     if (direction == SOAPY_SDR_TX)
     {
         tx_bandwidth = (uint32_t)bw;
         status       = skiq_write_tx_sample_rate_and_bandwidth(
-            card, tx_hdl, tx_sample_rate, tx_bandwidth);
+            this->card, this->tx_hdl, this->tx_sample_rate, tx_bandwidth);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
                           "Failure: skiq_write_tx_sample_rate_and_bandwidth "
-                          "(card %d, sample_rate %d, bandwidth %d, status %d)",
-                          card, tx_sample_rate, tx_bandwidth, status);
+                          "(card %u, sample_rate %u, bandwidth %u, status %u)",
+                          this->card, this->tx_sample_rate, tx_bandwidth, status);
         }
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting tx bandwidth to %u", tx_bandwidth);
     }
 }
 

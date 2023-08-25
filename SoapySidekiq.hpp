@@ -16,7 +16,7 @@
 #include <SoapySDR/Logger.hpp>
 #include <SoapySDR/Types.hpp>
 
-#define DEFAULT_NUM_BUFFERS      (30)
+#define DEFAULT_NUM_BUFFERS      (3000)
 #define DEFAULT_ELEMS_PER_SAMPLE (2)
 #define DEFAULT_TX_BUFFER_LENGTH (8188)
 //#define DEFAULT_TX_BUFFER_LENGTH  (2044)
