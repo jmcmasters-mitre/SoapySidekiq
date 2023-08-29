@@ -1,0 +1,268 @@
+#!/bin/python3
+
+import os
+import sys
+import time
+import threading
+import argparse
+import pickle
+import signal
+
+import numpy as np
+import SoapySDR
+print(SoapySDR, __file__)
+from SoapySDR import *
+
+#np.set_printoptions(threshold=sys.maxsize)
+
+############################################################################################
+# Settings
+############################################################################################
+DEBUG = False
+
+# Data transfer settings
+NUM_BUFF = 100
+rx_chan = 0             # RX1 = 0, RX2 = 1
+use_agc = False          # Use or don't use the AGC
+timeout_us = int(10e6)
+running = True
+rx_stream = None
+max_qsize = 0
+getBlockId = 0
+recordId = 0
+
+sample_queue = []
+
+BLOCK_SIZE_INTS = 1018 * 2
+
+def get_expected(max_value, size_words, first_value):
+    #np.set_printoptions(threshold=sys.maxsize)
+#    print(f"get_expected: max_value {max_value}, size_words {size_words}, first_value {first_value}")
+
+    neg_value = -(max_value + 1)
+    out_buff = np.array([]) 
+
+    in_size_ints = size_words * 2
+    size_ints_left = in_size_ints
+    ctr = 0
+    while size_ints_left >= BLOCK_SIZE_INTS:
+        ctr += 1
+        size_ints = BLOCK_SIZE_INTS
+#        print(f"in while ctr {ctr} size_ints_left {size_ints_left}")
+
+        size_ints_left -= size_ints
+        last_value = (first_value + size_ints)
+        if last_value < max_value:
+#            print(f"buff0: max_value {max_value}, size_ints {size_ints}, first_value {first_value}, last_value {last_value}, neg_value {neg_value}")
+            buff0 = np.arange(first_value, last_value, dtype=np.int16)
+#            print(f"buff0.size {buff0.size}", buff0)
+#            print(f"buff0.size {buff0.size}")
+            out_buff = np.append(out_buff, buff0)
+            #print(f"out_buff.size {out_buff.size}")
+            first_value = last_value
+        else:
+            #print(f"buff1: max_value {max_value}, first_value {first_value} ")
+            buff1 = np.arange(first_value, max_value + 1, dtype=np.int16)
+#            print(f"buff1.size {buff1.size}", buff1)
+            #print(f"buff1.size {buff1.size}")
+
+            size_ints = size_ints - buff1.size
+            last_value = neg_value + size_ints -1
+            #print(f"buff2: max_value {max_value}, size_ints {size_ints}, last_value {last_value}, neg_value {neg_value}")
+            buff2 = np.arange(neg_value, last_value+ 1, dtype=np.int16)
+#            print(f"buff2.size {buff2.size}", buff2)
+            #print(f"buff2.size {buff2.size}")
+
+            first_value = last_value+1
+            buff3 =  np.append(buff1, buff2)
+            out_buff = np.append(out_buff, buff3)
+#            print(f"out_buff.size {out_buff.size}", buff3)
+            #print(f"out_buff.size {out_buff.size}")
+
+    return out_buff
+
+def validate_block(block, N, max_data):
+    first_expected = block[0]
+
+    expected = get_expected(max_data, N, first_expected)
+
+    if not np.array_equal(expected, block):
+        #np.set_printoptions(threshold=sys.maxsize)
+        #print("failure", expected.size,  block.size)
+        #print("failure", expected, block );
+
+        for j in range(((2*N) )):
+            this_value = np.int16(block[j])
+            expected_value = np.int16(expected[j])
+            if (this_value != expected_value):
+                #print(" short index", j, "expected_value", expected_value, "value", this_value)
+
+                #error print the buffer around the error
+                for k in range(-5, 5):
+                    print((j + k), " ", expected[j+k], block[j+k])
+                exit()
+
+        print("success but no success")
+#        print(f"expected {expected}, actual {block}")
+        exit()
+
+#    print(f" success")
+
+    return 0 
+
+
+def getBlocks(N, rx_stream):
+    global running, sample_queue, max_qsize, getBlockId
+
+    print("getBlocks: ",  threading.get_native_id())
+    idx = 0
+    while running:
+        if DEBUG:
+            print("getBlock", idx)
+
+        buff = np.empty(2*N, dtype=np.int16)
+        sr = sdr.readStream(rx_stream, [buff], N)
+        rc = sr.ret # number of samples read or the error code
+        assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
+
+        sample_queue.append(buff)
+
+        curr_qsize = len(sample_queue)
+        if curr_qsize > max_qsize:
+            max_qsize = curr_qsize
+
+        idx += 1
+
+def validateBlocks(N, max_data):
+    global running, sample_queue, recordId, index
+
+    print("validateBlocks: ",  threading.get_native_id())
+    print(f"N {N}, max_data {max_data}")
+
+    index = 0;
+    while running:
+        while len(sample_queue):
+            if DEBUG:
+                print("recordBlocks", len(sample_queue))
+
+            block = sample_queue.pop(0)
+#            print(block)
+
+            validate_block(block, N, max_data)
+#            print(block)
+            
+            index += 1
+
+        time.sleep(1/1000)
+
+def signal_handler(sig, frame):
+    global running
+    print('You pressed Ctrl+C!')
+    running = False
+
+############################################################################################
+# Receive Signal
+############################################################################################
+def main(cardno, rx_chan, fs, bw, freq):
+    global running, sdr, rx_stream, index
+    
+    index = 0
+    args = dict(card = cardno)
+
+    sdr = SoapySDR.Device(args)
+
+    SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
+
+    sdr.writeSetting("counter", "true")
+    setting = sdr.readSetting("counter")
+    print("read counter", setting)
+
+    sdr.setSampleRate(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
+    sdr.setBandwidth(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
+    sdr.setGainMode(SOAPY_SDR_RX, rx_chan, use_agc)       # Set the gain mode
+    sdr.setFrequency(SOAPY_SDR_RX, rx_chan, freq)         # Tune the LO
+
+    # Create data buffer and start streaming samples to it
+    rx_stream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, [rx_chan])  # Setup data stream
+
+    #determine max value based upon resolution
+    max_value = sdr.readSetting("max_value")
+
+    SCALE = float(max_value)
+    max_data = int(SCALE)
+    print("max value based upon resolution", max_data)
+
+
+    # create a re-usable buffer for receiving samples
+    N = sdr.getStreamMTU(rx_stream)
+    N = 6*N
+    print("Stream MTU",  N)
+
+    filepointer = open("samples.bin", "wb")
+
+    getblocks = threading.Thread(target=getBlocks, name='ThreadGet',args=(N,rx_stream, ))
+    recordblocks = threading.Thread(target=validateBlocks, name='ThreadValidate',args=(N,max_data,))
+
+    sdr.activateStream(rx_stream)  # this turns the radio on
+
+    getblocks.start()
+    recordblocks.start()
+    print(f"recordId: {recordId}, getBlockId: {getBlockId}")
+
+    while running:
+        try:
+            print(f"max_qsize: {max_qsize}, index: {index}") 
+
+        except FileNotFoundError:
+            print("File not found.")
+            running = False;
+        except OSError:
+            print("OS error occurred.")
+            running = False;
+
+        time.sleep(3)
+
+    getblocks.join()
+    recordblocks.join()
+
+    
+    sdr.deactivateStream(rx_stream)
+    sdr.closeStream(rx_stream)
+
+
+def parse_command_line_arguments():
+    """ Create command line options """
+    help_formatter = argparse.ArgumentDefaultsHelpFormatter
+    parser = argparse.ArgumentParser(description='Test cf32 receive ',
+                                     formatter_class=help_formatter)
+    parser.add_argument('-c', required=False, dest='card',
+                        default='0', help=' Card')
+    parser.add_argument('-chan', type=int, required=False, dest='chan',
+                        default=0, help=' Channel')
+    parser.add_argument('-r', type=float, required=False, dest='fs',
+                        default=2e6, help='Sample Rate')
+    parser.add_argument('-b', type=float, required=False, dest='bw',
+                        default=18e6, help='Bandwidth')
+    parser.add_argument('-f', type=float, required=False, dest='freq',
+                        default=1000e6, help='Frequency')
+
+    return parser.parse_args(sys.argv[1:])
+
+
+if __name__ == '__main__':
+
+    pars = parse_command_line_arguments()
+    signal.signal(signal.SIGINT, signal_handler)
+
+    if (pars.fs <= pars.bw):
+        print("Warning: Bandwidth must be smaller than the sample rate, Setting bandwidth to 80% of sample rate.")
+
+        pars.bw = 0.8 * pars.fs
+
+    print("card (-c)\t\t:", pars.card, "\t\t\tchannel (-chan)\t\t:", pars.chan)
+    print("sample rate (-s)\t:", pars.fs/1000000, "M","\t\tbandwidth (-bw)\t\t:", pars.bw/1000000, "M")
+    print("freq (-f)\t:", pars.freq/1000000)
+
+    main(pars.card, pars.chan, pars.fs, pars.bw, pars.freq)
+
+
