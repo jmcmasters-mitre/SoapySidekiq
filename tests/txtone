@@ -10,12 +10,7 @@ import argparse
 import SoapySDR
 from SoapySDR import *
 
-#N = 8188
-#N = 8192
-#N = (8188 * 4) + 32
-
 NUM_MTU = 8
-
 
 def make_tone(n, make_float, fcen, fs, phi=0.285):
     """
@@ -43,44 +38,53 @@ def make_tone(n, make_float, fcen, fs, phi=0.285):
         return sig_int16
 
 
-def transmit_tone(freq=1e7, chan=0, fs=31.25, attenuation=20, buff_len=16384, args="", make_float=False):
-    """ Transmit a tone out of the Sidekiq """
+def main(cardno=0, serial=None, handle=0, 
+         rate=20e6, bw=None, freq=1e7, 
+         attenuation=100, make_float=False, offset=None):
 
-    sdr = SoapySDR.Device(args)  
+    if serial is None:
+        args = dict(card = cardno)
+    else:
+        args = dict(serial = '8N55')
+
+    print(f"args {args}");
+    sdr = SoapySDR.Device(args)
+
     SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
 #    SoapySDR.setLogLevel(SOAPY_SDR_ERROR)
 
     if (make_float):
-            tx_stream = sdr.setupStream(SOAPY_SDR_TX, SOAPY_SDR_CF32, [chan])
+        tx_stream = sdr.setupStream(SOAPY_SDR_TX, SOAPY_SDR_CF32, [handle])
     else:
-        tx_stream = sdr.setupStream(SOAPY_SDR_TX, SOAPY_SDR_CS16, [chan])
-
-    sdr.activateStream(tx_stream)  # this turns the radio on
+        tx_stream = sdr.setupStream(SOAPY_SDR_TX, SOAPY_SDR_CS16, [handle])
 
     # make the buffer the size of the MTU * The number of MTU we want in one go
     buff_len=(sdr.getStreamMTU(tx_stream) * NUM_MTU)
-
-    #buff_len = N
     print("buff_len", buff_len)
 
-    # Generate tone buffer that can be repeated without phase discontinuity
-    bb_freq = fs / 4  # baseband frequency of tone
-    tx_buff = make_tone(buff_len, make_float, bb_freq, fs)
-    lo_freq = freq   # Calc LO freq to put tone at tone_rf
-    print("lo_freq", lo_freq, "tone_freq ", bb_freq, "buff_len", buff_len, "fs", fs, )
+    if offset is None:
+        offset = rate / 4
+
+    print(f"tone will be {offset} Hz above LO")
+
+    tx_buff = make_tone(buff_len, make_float, offset, rate)
 
     # Setup Radio
-    sdr.setSampleRate(SOAPY_SDR_TX, chan, fs)  # Set sample rate
-    sdr.setBandwidth(SOAPY_SDR_TX, chan, fs)  
-    sdr.setFrequency(SOAPY_SDR_TX, chan, lo_freq)  # Tune the LO
-    sdr.setGain(SOAPY_SDR_TX, chan, attenuation)
+    sdr.setSampleRate(SOAPY_SDR_TX, handle, float(rate))
 
-    time_last_print = time.time()
+    if bw is not None:
+        sdr.setBandwidth(SOAPY_SDR_TX, handle, float(bw))  
+    else:
+        sdr.setBandwidth(SOAPY_SDR_TX, handle, float((rate * 0.8)))  
+
+    sdr.setFrequency(SOAPY_SDR_TX, handle, float(freq))  
+
+    sdr.setGain(SOAPY_SDR_TX, handle, float(attenuation))
+
+    sdr.activateStream(tx_stream)  # this turns the radio on
+
     total_samps = 0
 
-    ctr = 0
-    # Transmit
-    print('Now Transmitting a tone at ', (fs/4000000), "MHz above LO frequency")
     while True:
         try:
             rc = sdr.writeStream(tx_stream, [tx_buff], buff_len)
@@ -90,16 +94,12 @@ def transmit_tone(freq=1e7, chan=0, fs=31.25, attenuation=20, buff_len=16384, ar
             break
 
         total_samps += buff_len
-
-        if time.time() > time_last_print + 5.0:
-            rate = total_samps / (time.time() - time_last_print) / 1e6
-            print("measured sample rate: %f Msps" % rate)
+#        print(f"total_samps {total_samps:,}, mod {(total_samps % rate):,}, div {(total_samps / rate):,}")
+        
+        if total_samps / rate > 1:
+            print(". ", end='', flush=True)
             total_samps = 0
-            time_last_print = time.time()
 
-
-
-    print("Stop streaming")
     sdr.deactivateStream(tx_stream)
     sdr.closeStream(tx_stream)
 
@@ -107,25 +107,40 @@ def transmit_tone(freq=1e7, chan=0, fs=31.25, attenuation=20, buff_len=16384, ar
 def parse_command_line_arguments():
     """ Create command line options for transmit function """
     help_formatter = argparse.ArgumentDefaultsHelpFormatter
-    parser = argparse.ArgumentParser(description='Transmit a tone on the AIR-T',
+    parser = argparse.ArgumentParser(description='tx app template',
                                      formatter_class=help_formatter)
-    parser.add_argument('-f', type=float, required=False, dest='freq',
-                        default=1000e6, help='Lo Frequency')
-    parser.add_argument('-c', type=int, required=False, dest='chan',
-                        default=0, help='TX Channel Number [0 or 1]')
-    parser.add_argument('-s', type=float, required=False, dest='fs',
-                        default=40e6, help='TX Sample Rate')
-    parser.add_argument('-a', type=float, required=False, dest='attenuation',
+
+    parser.add_argument('-c', required=False, dest='card',
+                        default="0", help='Card number') 
+    parser.add_argument('--serial', required=False, dest='serial',
+                        default=None, help='Serial number') 
+    parser.add_argument('--handle', type=int, required=False, dest='handle',
+                        default=0, help='Handle [0 or 1]')
+    parser.add_argument('-r', type=int, required=False, dest='rate',
+                        default=40e6, help='Sample Rate')
+    parser.add_argument('-bw', type=int, required=False, dest='bw',
+                        default=None, help='Bandwidth')
+    parser.add_argument('-f', type=int, required=False, dest='freq',
+                        default=1000e6, help='LO Frequency')
+    parser.add_argument('--offset', type=int, required=False, dest='offset',
+                        default=None, help='Offset from LO')
+    parser.add_argument('-o', type=int, required=False, dest='attenuation',
                         default=0, help='TX attenuation')
-    parser.add_argument('-n', type=int, required=False, dest='buff_len',
-                        default=16384, help='TX Buffer Size')
-    parser.add_argument('--args', type=str, required=False, dest='args',
-                        default="", help='card arguments') 
-    parser.add_argument('--make-float', required=False, dest='make_float', action="store_true",
-                        default=False, help='use cf32 instad of cs16')
+    
     return parser.parse_args(sys.argv[1:])
 
 
 if __name__ == '__main__':
     pars = parse_command_line_arguments()
-    transmit_tone(pars.freq, pars.chan, pars.fs, pars.attenuation, pars.buff_len, pars.args, pars.make_float)
+
+    make_float = False
+
+    main(pars.card, 
+        pars.serial, 
+        pars.handle, 
+        pars.rate, 
+        pars.bw, 
+        pars.freq, 
+        pars.attenuation, 
+        make_float,
+        pars.offset)
