@@ -234,26 +234,31 @@ void SoapySidekiq::rx_receive_operation(void)
  * Stream API
  ******************************************************************/
 
-SoapySDR::Stream *SoapySidekiq::setupStream(const int          direction,
+SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
                                             const std::string &format,
                                             const std::vector<size_t> &channels,
                                             const SoapySDR::Kwargs &   args)
 {
 
-    int                   status      = 0;
+    int status = 0;
     skiq_rx_stream_mode_t stream_mode = skiq_rx_stream_mode_balanced;
     SoapySDR_logf(SOAPY_SDR_TRACE, "setupStream");
 
     rx_block_size_in_words = 0;
 
-    //  check the channel configuration
-    if (channels.size() > 1 || (channels.size() > 0 && channels.at(0) != 0))
-    {
-        throw std::runtime_error("setupStream invalid channel selection");
-    }
-
     if (direction == SOAPY_SDR_RX)
     {
+        //  check the channel configuration
+        if (channels.size() > 1) 
+        {
+            throw std::runtime_error("setupStream invalid channel selection");
+        }
+
+        rx_hdl = (skiq_rx_hdl_t)channels.at(0);
+
+        SoapySDR_logf(SOAPY_SDR_INFO, "The RX handle is: %u", rx_hdl);
+                
+
         status = skiq_write_rx_stream_mode(card, stream_mode);
         if (status != 0)
         {
@@ -261,6 +266,7 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int          direction,
                 SOAPY_SDR_ERROR,
                 "Error: unable to set RX stream mode with status %d\n", status);
         }
+
         status = skiq_read_rx_block_size(card, stream_mode);
         if (status < 0)
         {
@@ -271,6 +277,9 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int          direction,
             throw std::runtime_error("skiq_read_rx_block_size");
         }
         rx_block_size_in_bytes   = status;
+        rx_block_size_in_words   = status / 4;
+        SoapySDR_logf(SOAPY_SDR_INFO, "Rx block size in words: %u", rx_block_size_in_words);
+
         rx_payload_size_in_bytes = status - SKIQ_RX_HEADER_SIZE_IN_BYTES;
         rx_payload_size_in_words = rx_payload_size_in_bytes / 4;
 
@@ -289,8 +298,6 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int          direction,
         }
         rxWriteIndex = 0;
         rxReadIndex  = 0;
-
-        rx_block_size_in_words = rx_block_size_in_bytes / 4;
 
         if (format == "CS16")
         {
@@ -313,11 +320,18 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int          direction,
     }
     else if (direction == SOAPY_SDR_TX)
     {
+        SoapySDR_logf( SOAPY_SDR_DEBUG, "size %d, channel %d\n", 
+                      channels.size(), channels.at(0));
+
         //  check the channel configuration
-        if (channels.size() > 1 || (channels.size() > 0 && channels.at(0) != 0))
+        if (channels.size() > 1)
         {
             throw std::runtime_error("setupStream invalid channel selection");
         }
+        tx_hdl = (skiq_tx_hdl_t)channels.at(0);
+
+        SoapySDR_logf(SOAPY_SDR_INFO, "tx_hdl %u", tx_hdl);
+                
 
         //  check the format only support CS16 for now
         if (format == "CS16")
@@ -343,6 +357,9 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int          direction,
             p_tx_block[i] = skiq_tx_block_allocate(DEFAULT_TX_BUFFER_LENGTH);
         }
         currTXBuffIndex = 0;
+
+        tx_hdl = (skiq_tx_hdl_t)channels.at(0);
+        
         return TX_STREAM;
     }
     else
@@ -380,9 +397,11 @@ size_t SoapySidekiq::getStreamMTU(SoapySDR::Stream *stream) const
 
     if (stream == RX_STREAM)
     {
+        SoapySDR_logf(SOAPY_SDR_INFO, "block size %u", rx_block_size_in_words);
+
         //    return (DEFAULT_NUM_BUFFERS * (rx_block_size_in_words -
         //    SKIQ_RX_HEADER_SIZE_IN_WORDS));
-        return (2 * (rx_block_size_in_words - SKIQ_RX_HEADER_SIZE_IN_WORDS));
+        return ((rx_block_size_in_words - SKIQ_RX_HEADER_SIZE_IN_WORDS));
     }
     else if (stream == TX_STREAM)
     {
@@ -421,7 +440,7 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream, const int flags,
     }
     else if (stream == TX_STREAM)
     {
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "Start TX");
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "Start TX, hdl: %d", tx_hdl);
         p_tx_block_index = 0;
         tx_underruns     = 0;
 
@@ -549,7 +568,7 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
 
     if (waitTime <= 0)
     {
-        SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out");
+        SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out 1");
         return SOAPY_SDR_TIMEOUT;
     }
 
@@ -687,7 +706,7 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
         }
         if (waitTime <= 0)
         {
-            SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out");
+            SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out 2");
             return SOAPY_SDR_TIMEOUT;
         }
         words_left_in_block = rx_payload_size_in_words;

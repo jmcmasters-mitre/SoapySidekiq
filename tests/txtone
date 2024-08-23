@@ -65,19 +65,19 @@ def main(cardno=0, serial=None, handle=0,
     if offset is None:
         offset = rate / 4
 
-    print(f"tone will be {offset} Hz above LO")
+    print(f"\nTone will be {int(offset):,} Hz above LO\n")
 
     tx_buff = make_tone(buff_len, make_float, offset, rate)
 
     # Setup Radio
-    sdr.setSampleRate(SOAPY_SDR_TX, handle, float(rate))
+    sdr.setSampleRate(SOAPY_SDR_TX, handle, rate)
 
     if bw is not None:
-        sdr.setBandwidth(SOAPY_SDR_TX, handle, float(bw))  
+        sdr.setBandwidth(SOAPY_SDR_TX, handle, bw)  
     else:
-        sdr.setBandwidth(SOAPY_SDR_TX, handle, float((rate * 0.8)))  
+        sdr.setBandwidth(SOAPY_SDR_TX, handle, (rate * 0.8))  
 
-    sdr.setFrequency(SOAPY_SDR_TX, handle, float(freq))  
+    sdr.setFrequency(SOAPY_SDR_TX, handle, freq)  
 
     sdr.setGain(SOAPY_SDR_TX, handle, float(attenuation))
 
@@ -116,15 +116,15 @@ def parse_command_line_arguments():
                         default=None, help='Serial number') 
     parser.add_argument('--handle', type=int, required=False, dest='handle',
                         default=0, help='Handle [0 or 1]')
-    parser.add_argument('-r', type=int, required=False, dest='rate',
+    parser.add_argument('-r', type=float, required=False, dest='rate',
                         default=40e6, help='Sample Rate')
-    parser.add_argument('-bw', type=int, required=False, dest='bw',
+    parser.add_argument('-bw', type=float, required=False, dest='bw',
                         default=None, help='Bandwidth')
-    parser.add_argument('-f', type=int, required=False, dest='freq',
+    parser.add_argument('-f', type=float, required=False, dest='freq',
                         default=1000e6, help='LO Frequency')
-    parser.add_argument('--offset', type=int, required=False, dest='offset',
+    parser.add_argument('--offset', type=float, required=False, dest='offset',
                         default=None, help='Offset from LO')
-    parser.add_argument('-o', type=int, required=False, dest='attenuation',
+    parser.add_argument('-a', type=int, required=False, dest='attenuation',
                         default=0, help='TX attenuation')
     
     return parser.parse_args(sys.argv[1:])
