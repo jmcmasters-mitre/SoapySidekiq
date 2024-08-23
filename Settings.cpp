@@ -79,7 +79,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
                       "Failure: setting iq order (card %d), status %d", card,
                       status);
     }
-    SoapySDR_logf(SOAPY_SDR_DEBUG, "Setting iq mode");
+    SoapySDR_logf(SOAPY_SDR_INFO, "Setting iq mode to I then Q");
 
     rx_block_size_in_words = 0;
 
@@ -113,7 +113,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
 
     this->resolution = tmp_resolution;
     this->max_value = (double) ((1 << (tmp_resolution-1))-1);
-    SoapySDR_logf(SOAPY_SDR_DEBUG, "Info: resolution %d" " bits, max ADC value %d", 
+    SoapySDR_logf(SOAPY_SDR_INFO, "Card resolution %d" " bits, max ADC value %d", 
                   this->resolution, (uint64_t) this->max_value); 
 
 }

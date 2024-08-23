@@ -320,9 +320,6 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
     }
     else if (direction == SOAPY_SDR_TX)
     {
-        SoapySDR_logf( SOAPY_SDR_DEBUG, "size %d, channel %d\n", 
-                      channels.size(), channels.at(0));
-
         //  check the channel configuration
         if (channels.size() > 1)
         {
@@ -330,8 +327,7 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
         }
         tx_hdl = (skiq_tx_hdl_t)channels.at(0);
 
-        SoapySDR_logf(SOAPY_SDR_INFO, "tx_hdl %u", tx_hdl);
-                
+        SoapySDR_logf(SOAPY_SDR_INFO, "The TX handle is: %u", tx_hdl);
 
         //  check the format only support CS16 for now
         if (format == "CS16")
