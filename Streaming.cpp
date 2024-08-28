@@ -1,9 +1,9 @@
-//  Copyright [2018] <Alexander Hurd>"
-
 #include "SoapySidekiq.hpp"
 #include <SoapySDR/Formats.hpp>
 #include <cstring> // memcpy
 #include <iostream>
+#include <vector>
+#include <string>
 #include <sidekiq_types.h>
 #include <unistd.h>
 
@@ -43,29 +43,25 @@ SoapySDR::ArgInfoList SoapySidekiq::getStreamArgsInfo(
 
     if (direction == SOAPY_SDR_RX)
     {
-        bufflenArg.value = std::to_string(rx_block_size_in_words);
+        bufflenArg.name        = "Buffer Sample Count";
+        bufflenArg.description = "Number of IQ samples per buffer.";
+        bufflenArg.units       = "samples";
+        bufflenArg.type        = SoapySDR::ArgInfo::INT;
+        bufflenArg.value       = std::to_string(rx_payload_size_in_words);
+
+        streamArgs.push_back(bufflenArg);
+
     }
     else
     {
-        bufflenArg.value = std::to_string(DEFAULT_TX_BUFFER_LENGTH);
+        bufflenArg.name        = "Buffer Sample Count";
+        bufflenArg.description = "Number of IQ samples per buffer.";
+        bufflenArg.units       = "samples";
+        bufflenArg.value       = std::to_string(DEFAULT_TX_BUFFER_LENGTH);
+        bufflenArg.type        = SoapySDR::ArgInfo::INT;
+
+        streamArgs.push_back(bufflenArg);
     }
-
-    bufflenArg.name        = "Buffer Sample Count";
-    bufflenArg.description = "Number of IQ samples per buffer.";
-    bufflenArg.units       = "samples";
-    bufflenArg.type        = SoapySDR::ArgInfo::INT;
-
-    streamArgs.push_back(bufflenArg);
-
-    SoapySDR::ArgInfo buffersArg;
-    buffersArg.key         = "buffers";
-    buffersArg.value       = std::to_string(DEFAULT_NUM_BUFFERS);
-    buffersArg.name        = "Ring Buffers";
-    buffersArg.description = "Number of buffers in the ring.";
-    buffersArg.units       = "buffers";
-    buffersArg.type        = SoapySDR::ArgInfo::INT;
-
-    streamArgs.push_back(buffersArg);
 
     return streamArgs;
 }
@@ -278,10 +274,10 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
         }
         rx_block_size_in_bytes   = status;
         rx_block_size_in_words   = status / 4;
-        SoapySDR_logf(SOAPY_SDR_INFO, "Rx block size in words: %u", rx_block_size_in_words);
 
         rx_payload_size_in_bytes = status - SKIQ_RX_HEADER_SIZE_IN_BYTES;
         rx_payload_size_in_words = rx_payload_size_in_bytes / 4;
+        SoapySDR_logf(SOAPY_SDR_INFO, "Rx payload size in words: %u", rx_payload_size_in_words);
 
         // allocate the ring buffers
         for (int i = 0; i < DEFAULT_NUM_BUFFERS; i++)
@@ -393,11 +389,11 @@ size_t SoapySidekiq::getStreamMTU(SoapySDR::Stream *stream) const
 
     if (stream == RX_STREAM)
     {
-        SoapySDR_logf(SOAPY_SDR_INFO, "block size %u", rx_block_size_in_words);
+        SoapySDR_logf(SOAPY_SDR_INFO, "block size %u", rx_payload_size_in_words);
 
         //    return (DEFAULT_NUM_BUFFERS * (rx_block_size_in_words -
         //    SKIQ_RX_HEADER_SIZE_IN_WORDS));
-        return ((rx_block_size_in_words - SKIQ_RX_HEADER_SIZE_IN_WORDS));
+        return (rx_payload_size_in_words);
     }
     else if (stream == TX_STREAM)
     {

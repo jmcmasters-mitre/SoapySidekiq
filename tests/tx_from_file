@@ -33,7 +33,7 @@ def main(cardno=0, serial=None, handle=0,
     else:
         tx_stream = sdr.setupStream(SOAPY_SDR_TX, SOAPY_SDR_CS16, [handle])
 
-    tx_buff = np.fromfile("samples.bin")
+    tx_buff = np.fromfile("samples.bin", dtype='<i2')
     buff_len = tx_buff.size
 
     SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Buffer length is {buff_len:,} words")

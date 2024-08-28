@@ -36,8 +36,6 @@ class SoapySidekiq : public SoapySDR::Device
 
     std::string getDriverKey(void) const;
 
-    std::string getHardwareKey(void) const;
-
     SoapySDR::Kwargs getHardwareInfo(void) const;
 
     /*******************************************************************
@@ -131,8 +129,6 @@ class SoapySidekiq : public SoapySDR::Device
      * Gain API
      ******************************************************************/
 
-    std::vector<std::string> listGains(const int    direction,
-                                       const size_t channel) const;
 
     bool hasGainMode(const int direction, const size_t channel) const;
 
@@ -166,9 +162,6 @@ class SoapySidekiq : public SoapySDR::Device
                                           const size_t       channel,
                                           const std::string &name) const;
 
-    SoapySDR::ArgInfoList getFrequencyArgsInfo(const int    direction,
-                                               const size_t channel) const;
-
     /*******************************************************************
      * Sample Rate API
      ******************************************************************/
@@ -189,25 +182,12 @@ class SoapySidekiq : public SoapySDR::Device
 
     double getBandwidth(const int direction, const size_t channel) const;
 
-    std::vector<double> listBandwidths(const int    direction,
-                                       const size_t channel) const;
-
-    /*******************************************************************
-     * Attenuation API
-     ******************************************************************/
-
-    //  TODO
-
     /*******************************************************************
      * Sensor API
      ******************************************************************/
     std::vector<std::string> listSensors(void) const;
     SoapySDR::ArgInfo        getSensorInfo(const std::string &key) const;
     std::string              readSensor(const std::string &key) const;
-    std::vector<std::string> listSensors(const int    direction,
-                                         const size_t channel) const;
-    std::string readSensor(const int direction, const size_t channel,
-                           const std::string &key) const;
 
     /*******************************************************************
      * Settings API
@@ -242,18 +222,20 @@ class SoapySidekiq : public SoapySDR::Device
     SoapySDR::Stream *const RX_STREAM = (SoapySDR::Stream *)0x2;
 
     //  sidekiq card
+    std::string part_str;
+    skiq_part_t part;
+
     uint8_t                 card{};
     std::basic_string<char> serial{};
     std::basic_string<char> timeSource{};
     uint32_t                resolution{};
     double                  max_value{};
 
-    //  sidekiq hdl
-
     bool     useShort{};
     uint32_t debug_ctr{};
 
     //  rx
+    std::basic_string<char> timetype{};
     uint8_t       num_rx_channels{};
     skiq_rx_hdl_t rx_hdl{};
     uint64_t      rx_center_frequency{};

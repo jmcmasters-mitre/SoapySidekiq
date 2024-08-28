@@ -8,6 +8,7 @@
 
 static std::vector<SoapySDR::Kwargs> findSidekiq(const SoapySDR::Kwargs &args)
 {
+
     int                           status = 0;
     std::vector<SoapySDR::Kwargs> results;
 
@@ -53,8 +54,7 @@ static std::vector<SoapySDR::Kwargs> findSidekiq(const SoapySDR::Kwargs &args)
                           card_owner);
         }
 
-        std::string deviceLabel =
-            "Epiq Solutions - Sidekiq :: " + std::string(serial_str);
+        std::string deviceLabel = "Epiq Solutions - Sidekiq :: ";
 
         devInfo["card"]         = std::to_string(card_list[i]);
         devInfo["label"]        = deviceLabel;
@@ -75,7 +75,7 @@ static std::vector<SoapySDR::Kwargs> findSidekiq(const SoapySDR::Kwargs &args)
             {
                 continue;
             }
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "Found device by card %s",
+            SoapySDR_logf(SOAPY_SDR_INFO, "Found device by card %s",
                           devInfo.at("card").c_str());
         }
         else if (args.count("serial") != 0)
@@ -84,7 +84,7 @@ static std::vector<SoapySDR::Kwargs> findSidekiq(const SoapySDR::Kwargs &args)
             {
                 continue;
             }
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "Found device by serial %s",
+            SoapySDR_logf(SOAPY_SDR_INFO, "Found device by serial %s",
                           args.at("serial").c_str());
         }
         results.push_back(SoapySidekiq::sidekiq_devices[i]);
