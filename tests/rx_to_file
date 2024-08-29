@@ -37,19 +37,25 @@ def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
 
     # Setup Radio
     sdr.setSampleRate(SOAPY_SDR_RX, handle, rate)
+    act_sample_rate = sdr.getSampleRate(SOAPY_SDR_RX, handle)
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"sample rate set to: {act_sample_rate}")
 
     if bw is not None:
         sdr.setBandwidth(SOAPY_SDR_RX, handle, bw)  
     else:
         sdr.setBandwidth(SOAPY_SDR_RX, handle, (rate * 0.8))  
+    act_bw = sdr.getBandwidth(SOAPY_SDR_RX, handle)
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"bw set to: {act_bw}")
 
     sdr.setFrequency(SOAPY_SDR_RX, handle, freq)  
+    act_freq = sdr.getFrequency(SOAPY_SDR_RX, handle)
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"freq set to: {act_freq}")
 
     if gain is not None:
         sdr.setGainMode(SOAPY_SDR_RX, handle, False)
         sdr.setGain(SOAPY_SDR_RX, handle, float(gain))
         setgain = sdr.getGain(SOAPY_SDR_RX, handle)
-        SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"actual gain: {setgain} dB ")
+        SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"gain set to: {setgain} dB ")
     else:
         sdr.setGainMode(SOAPY_SDR_RX, handle, True)
 

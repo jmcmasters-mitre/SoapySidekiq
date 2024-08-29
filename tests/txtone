@@ -79,7 +79,12 @@ def main(cardno=0, serial=None, handle=0,
 
     sdr.setFrequency(SOAPY_SDR_TX, handle, freq)  
 
-    sdr.setGain(SOAPY_SDR_TX, handle, float(attenuation))
+    if attenuation is not None:
+        sdr.setGain(SOAPY_SDR_TX, handle, float(attenuation))
+        setattenuation = sdr.getGain(SOAPY_SDR_TX, handle)
+        SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"actual attenuation: {setattenuation} dB ")
+    else:
+        sdr.setGain(SOAPY_SDR_TX, handle, float(0))
 
     sdr.activateStream(tx_stream)  # this turns the radio on
 

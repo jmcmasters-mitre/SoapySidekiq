@@ -60,7 +60,7 @@ class SoapySidekiq : public SoapySDR::Device
     SoapySDR::Stream *setupStream(
         const int direction, const std::string &format,
         const std::vector<size_t> &channels = std::vector<size_t>(),
-        const SoapySDR::Kwargs &   args     = SoapySDR::Kwargs());
+        const SoapySDR::Kwargs &args = SoapySDR::Kwargs());
 
     void closeStream(SoapySDR::Stream *stream);
 
@@ -103,18 +103,6 @@ class SoapySidekiq : public SoapySDR::Device
                             const long long timeNs = 0);
 
     /*******************************************************************
-     * Antenna API
-     ******************************************************************/
-
-    std::vector<std::string> listAntennas(const int    direction,
-                                          const size_t channel) const;
-
-    void setAntenna(const int direction, const size_t channel,
-                    const std::string &name);
-
-    std::string getAntenna(const int direction, const size_t channel) const;
-
-    /*******************************************************************
      * Frontend corrections API
      ******************************************************************/
 
@@ -147,20 +135,13 @@ class SoapySidekiq : public SoapySDR::Device
     /*******************************************************************
      * Frequency API
      ******************************************************************/
-
-    void setFrequency(const int direction, const size_t channel,
-                      const std::string &name, const double frequency,
+    void setFrequency(const int direction, const size_t channel, 
+                      const double frequency, 
                       const SoapySDR::Kwargs &args = SoapySDR::Kwargs());
 
-    double getFrequency(const int direction, const size_t channel,
-                        const std::string &name) const;
+    double getFrequency(const int direction, const size_t channel) const;
 
-    std::vector<std::string> listFrequencies(const int    direction,
-                                             const size_t channel) const;
-
-    SoapySDR::RangeList getFrequencyRange(const int          direction,
-                                          const size_t       channel,
-                                          const std::string &name) const;
+    SoapySDR::RangeList getFrequencyRange(const int direction, const size_t channel) const;
 
     /*******************************************************************
      * Sample Rate API
@@ -173,9 +154,6 @@ class SoapySidekiq : public SoapySDR::Device
 
     SoapySDR::RangeList getSampleRateRange(const int    direction,
                                            const size_t channel) const;
-
-    std::vector<double> listSampleRates(const int    direction,
-                                        const size_t channel) const;
 
     void setBandwidth(const int direction, const size_t channel,
                       const double bw);
@@ -215,7 +193,19 @@ class SoapySidekiq : public SoapySDR::Device
 
     void setHardwareTime(const long long timeNs, const std::string &what);
 
-    void setCommandTime(const long long, const std::string &);
+    /*******************************************************************
+     * Clocking API
+     ******************************************************************/
+
+    std::vector<std::string> listClockSources(void) const;
+
+    void setClockSource(const std::string &source);
+
+    std::string getClockSource(void) const;
+
+    double getReferenceClockRate(void) const;
+
+
 
   private:
     SoapySDR::Stream *const TX_STREAM = (SoapySDR::Stream *)0x1;

@@ -233,7 +233,7 @@ void SoapySidekiq::rx_receive_operation(void)
 SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
                                             const std::string &format,
                                             const std::vector<size_t> &channels,
-                                            const SoapySDR::Kwargs &   args)
+                                            const SoapySDR::Kwargs &args)
 {
 
     int status = 0;
