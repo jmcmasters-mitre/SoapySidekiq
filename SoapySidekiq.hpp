@@ -81,28 +81,6 @@ class SoapySidekiq : public SoapySDR::Device
                     const long long timeNs = 0, const long timeoutUs = 100000);
 
     /*******************************************************************
-     * Direct buffer access API
-     ******************************************************************/
-
-    size_t getNumDirectAccessBuffers(SoapySDR::Stream *stream);
-
-    int getDirectAccessBufferAddrs(SoapySDR::Stream *stream,
-                                   const size_t handle, void **buffs);
-
-    int acquireReadBuffer(SoapySDR::Stream *stream, size_t &handle,
-                          const void **buffs, int &flags, long long &timeNs,
-                          const long timeoutUs = 100000);
-
-    void releaseReadBuffer(SoapySDR::Stream *stream, const size_t handle);
-
-    int acquireWriteBuffer(SoapySDR::Stream *stream, size_t &handle,
-                           void **buffs, const long timeoutUs = 100000);
-
-    void releaseWriteBuffer(SoapySDR::Stream *stream, const size_t handle,
-                            const size_t numElems, int &flags,
-                            const long long timeNs = 0);
-
-    /*******************************************************************
      * Frontend corrections API
      ******************************************************************/
 
@@ -116,7 +94,6 @@ class SoapySidekiq : public SoapySDR::Device
     /*******************************************************************
      * Gain API
      ******************************************************************/
-
 
     bool hasGainMode(const int direction, const size_t channel) const;
 
@@ -164,7 +141,6 @@ class SoapySidekiq : public SoapySDR::Device
      * Sensor API
      ******************************************************************/
     std::vector<std::string> listSensors(void) const;
-    SoapySDR::ArgInfo        getSensorInfo(const std::string &key) const;
     std::string              readSensor(const std::string &key) const;
 
     /*******************************************************************

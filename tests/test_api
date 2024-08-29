@@ -310,6 +310,15 @@ def do_clocking(sdr, handle):
     source = sdr.getClockSource()
     print(f"\t{source}") 
 
+def do_sensors(sdr, handle):
+
+    sensors_list = sdr.listSensors()
+
+    for source in sensors_list:
+        print(f"\t{source}") 
+        sdr.readSensor(source)
+
+
 def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
     if serial is None:
         args = dict(card = cardno)
@@ -356,6 +365,8 @@ def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
 
     #  *** time API
     do_clocking(sdr, handle)
+
+    do_sensors(sdr, handle)
 
 
 

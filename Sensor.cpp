@@ -1,5 +1,3 @@
-//  Copyright [2018] <Alexander Hurd>"
-
 #include "SoapySidekiq.hpp"
 
 std::vector<std::string> SoapySidekiq::listSensors(void) const
@@ -13,17 +11,10 @@ std::vector<std::string> SoapySidekiq::listSensors(void) const
     return sensors;
 }
 
-SoapySDR::ArgInfo SoapySidekiq::getSensorInfo(const std::string &key) const
-{
-    SoapySDR_logf(SOAPY_SDR_TRACE, "getSensorInfo, key %s", key.c_str());
-
-    return SoapySDR::Device::getSensorInfo(key);
-}
-
 std::string SoapySidekiq::readSensor(const std::string &key) const
 {
     int status = 0;
-    SoapySDR_logf(SOAPY_SDR_TRACE, "readSensor, key: '%s'", key.c_str());
+    SoapySDR_logf(SOAPY_SDR_TRACE, "readSensor");
 
     if (key.compare("temperature") == 0)
     {
