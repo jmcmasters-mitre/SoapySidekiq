@@ -256,7 +256,7 @@ bool SoapySidekiq::hasDCOffsetMode(const int direction,
             throw std::runtime_error("");
         }
         
-        if ((mask & skiq_rx_cal_type_dc_offset)== skiq_rx_cal_type_dc_offset)
+        if ((mask & skiq_rx_cal_type_dc_offset) == skiq_rx_cal_type_dc_offset)
         {
             SoapySDR_logf(SOAPY_SDR_INFO, "handle %u, has DC Offest correction, mask is: %d", 
                           this->rx_hdl, mask);
@@ -271,6 +271,7 @@ bool SoapySidekiq::hasDCOffsetMode(const int direction,
     else if (direction == SOAPY_SDR_TX)
     {
         // Tx has quadcal only
+        SoapySDR_logf(SOAPY_SDR_WARNING, "TX does not have DC offset mode");
     }
     else
     {
@@ -292,21 +293,31 @@ void SoapySidekiq::setDCOffsetMode(const int direction,
     {
         this->rx_hdl = static_cast<skiq_rx_hdl_t>(channel);
 
-        status = skiq_write_rx_dc_offset_corr(card, this->rx_hdl, automatic);
+        skiq_rx_cal_mode_t cal_mode = skiq_rx_cal_mode_auto;
+
+        // if automatic is false, then we need to set the mode to manual
+        // otherwise set the mode to automatic
+        if (automatic == false)
+        {
+            cal_mode = skiq_rx_cal_mode_manual;
+        }
+
+        status = skiq_write_rx_cal_mode(card, this->rx_hdl, cal_mode);
         if (status != 0)
         {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_write_rx_dc_offset_corr failed "
-                          "(card %d, enable %d), status %d",
-                          card, automatic, status);
+            SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_write_rx_cal_mode failed "
+                          "(card %d, cal_mode %d), status %d",
+                          card, cal_mode, status);
             throw std::runtime_error("");
         }
 
         SoapySDR_logf(SOAPY_SDR_INFO, "channel: %u, setting DC offset correction to %s mode", 
-                      channel, automatic ? "enable" : "disable");
+                      channel, (bool)cal_mode ? "automatic" : "manual");
     }
     else if (direction == SOAPY_SDR_TX)
     {
         // Tx has quadcal only
+        SoapySDR_logf(SOAPY_SDR_WARNING, "TX does not have DC offset mode");
     }
     else
     {
@@ -318,27 +329,29 @@ void SoapySidekiq::setDCOffsetMode(const int direction,
 bool SoapySidekiq::getDCOffsetMode(const int direction,
                                    const size_t channel) const
 {
-    bool enable = false;
+    skiq_rx_cal_mode_t cal_mode; 
     int  status = 0;
     SoapySDR_logf(SOAPY_SDR_TRACE, "getDCOffsetMode");
 
     if (direction == SOAPY_SDR_RX)
     {
-        status = skiq_read_rx_dc_offset_corr(card, this->rx_hdl, &enable);
+        status = skiq_read_rx_cal_mode(card, this->rx_hdl, &cal_mode);
         if (status != 0)
         {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_read_rx_dc_offset_corr failure "
-                          "(card %u, enable %d), status %d",
-                          card, enable, status);
+            SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_read_rx_cal_mode failure "
+                          "(card %u, mode %d), status %d",
+                          card, cal_mode, status);
         throw std::runtime_error("");
         }
 
-        SoapySDR_logf(SOAPY_SDR_INFO, "Channel %d, DC offest correction is %s", 
-                      channel, enable ? "enabled" : "disabled");
+        SoapySDR_logf(SOAPY_SDR_INFO, "Channel %d, DC offest mode is %s", 
+                      channel, (bool)cal_mode ? "automatic" : "manual");
     }
     else if (direction == SOAPY_SDR_TX)
     {
         // Tx has quadcal only
+        SoapySDR_logf(SOAPY_SDR_WARNING, "TX does not have DC offset mode");
+        return false;
     }
     else
     {
@@ -346,7 +359,7 @@ bool SoapySidekiq::getDCOffsetMode(const int direction,
         throw std::runtime_error("");
     }
 
-    return enable;
+    return (bool)cal_mode;
 }
 
 /*******************************************************************

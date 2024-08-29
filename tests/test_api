@@ -27,11 +27,16 @@ def do_frontend(sdr, handle):
     dc_offset_mode = sdr.hasDCOffsetMode(SOAPY_SDR_RX, handle)
     print(f"{dc_offset_mode}")
 
+    dc_offset_mode = sdr.hasDCOffsetMode(SOAPY_SDR_TX, handle)
+    print(f"{dc_offset_mode}")
+
     # test invalid handle, no error due to it is a get command
     dc_offset_mode = sdr.hasDCOffsetMode(SOAPY_SDR_RX, 1)
     print(f"{dc_offset_mode}")
 
     sdr.setDCOffsetMode(SOAPY_SDR_RX, handle, True)
+
+    sdr.setDCOffsetMode(SOAPY_SDR_TX, handle, True)
 
     dc_offset_mode = sdr.getDCOffsetMode(SOAPY_SDR_RX, handle)
     print(f"\t{dc_offset_mode}")
