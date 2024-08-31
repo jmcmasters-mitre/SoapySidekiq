@@ -3,7 +3,7 @@
 set -x
 set -e
 
-sudo rm -r build
+sudo rm -rf build
 
 mkdir build
 

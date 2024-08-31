@@ -19,7 +19,6 @@
 #define DEFAULT_NUM_BUFFERS      (3000)
 #define DEFAULT_ELEMS_PER_SAMPLE (2)
 #define DEFAULT_TX_BUFFER_LENGTH (8188)
-//#define DEFAULT_TX_BUFFER_LENGTH  (2044)
 #define DEFAULT_SLEEP_US (100)
 #define SLEEP_1SEC       (1 * 1000000)
 
@@ -197,11 +196,16 @@ class SoapySidekiq : public SoapySDR::Device
     uint32_t                resolution{};
     double                  max_value{};
 
-    bool     useShort{};
+    bool     rxUseShort{};
+    bool     txUseShort{};
     uint32_t debug_ctr{};
 
     //  rx
+    std::mutex _mutex;
+    std::condition_variable _cv;
     std::basic_string<char> timetype{};
+    static bool   rx_running;
+
     uint8_t       num_rx_channels{};
     skiq_rx_hdl_t rx_hdl{};
     uint64_t      rx_center_frequency{};
@@ -240,5 +244,4 @@ class SoapySidekiq : public SoapySDR::Device
     void        rx_receive_operation(void);
 
     static std::vector<SoapySDR::Kwargs> sidekiq_devices;
-    static bool                          rx_running;
 };

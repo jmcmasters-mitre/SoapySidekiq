@@ -1,22 +1,33 @@
-#include "SoapySidekiq.hpp"
-#include <SoapySDR/Formats.hpp>
 #include <cstring> // memcpy
+#include <unistd.h>
 #include <iostream>
 #include <vector>
 #include <string>
+#include <thread>
+#include <mutex>
+
+#include "SoapySidekiq.hpp"
+#include <SoapySDR/Formats.hpp>
 #include <sidekiq_types.h>
-#include <unistd.h>
+
+// Attempted to put this in SoapySidekiq.hpp and it would not link
+// could not understand why
+bool   start_signal = false;
 
 std::vector<std::string> SoapySidekiq::getStreamFormats(
     const int direction, const size_t channel) const
 {
     SoapySDR_logf(SOAPY_SDR_TRACE, "getStreamFormats");
+
     std::vector<std::string> formats;
+
     formats.push_back(SOAPY_SDR_CS16);
+
     if (direction == SOAPY_SDR_RX)
     { 
         formats.push_back(SOAPY_SDR_CF32);
     }
+
     return formats;
 }
 
@@ -74,43 +85,6 @@ void SoapySidekiq::rx_receive_operation(void)
 {
     int status = 0;
 
-    SoapySDR_log(SOAPY_SDR_INFO, "Starting RX Sidekiq Thread");
-
-    // status = skiq_write_rx_data_src(card, rx_hdl, skiq_data_src_counter);
-
-    /* set rx source as iq data */
-    status = skiq_write_iq_order_mode(card, skiq_iq_order_qi);
-    if (status != 0)
-    {
-        SoapySDR_logf(SOAPY_SDR_ERROR,
-                      "Failure: skiq_write_rx_data_src (card %d) status %d",
-                      card, status);
-        throw std::runtime_error(" skiq_write_rx_data_src error");
-    }
-
-    skiq_iq_order_t iq_order;
-    status = skiq_read_iq_order_mode(card, &iq_order);
-
-    /* set a modest rx timeout */
-    status = skiq_set_rx_transfer_timeout(card, 100000);
-    if (status != 0)
-    {
-        SoapySDR_logf(
-            SOAPY_SDR_ERROR,
-            "Failure: skiq_set_rx_transfer_timeout (card %d) status %d", card,
-            status);
-        throw std::runtime_error(" skiq_set_rx_transfer_timeout ( error");
-    }
-
-    /* start rx streaming */
-    status = skiq_start_rx_streaming(card, rx_hdl);
-    if (skiq_start_rx_streaming(card, rx_hdl) != 0)
-    {
-        SoapySDR_logf(SOAPY_SDR_ERROR,
-                      "Failure: skiq_start_rx_streaming (card %d) status %d",
-                      card, status);
-        throw std::runtime_error(" skiq_start_rx_streaming error");
-    }
 
     //  skiq receive params
     skiq_rx_block_t *tmp_p_rx_block;
@@ -122,6 +96,15 @@ void SoapySidekiq::rx_receive_operation(void)
     // metadata
     uint64_t      overload = 0;
     skiq_rx_hdl_t rcvd_hdl;
+
+    std::unique_lock<std::mutex> lock(_mutex);
+
+    SoapySDR_log(SOAPY_SDR_TRACE, "entering rx_receive_thread");
+
+    // wait till called to start running
+    _cv.wait(lock, [this] { return start_signal; });
+
+    SoapySDR_log(SOAPY_SDR_INFO, "Starting RX Sidekiq Thread loop");
 
     //  loop until stream is deactivated
     while (rx_running)
@@ -150,11 +133,10 @@ void SoapySidekiq::rx_receive_operation(void)
                 {
                     if (len != rx_block_size_in_bytes)
                     {
-                        SoapySDR_logf(SOAPY_SDR_ERROR,
-                                      "received length %d is not the correct "
+                        SoapySDR_logf(SOAPY_SDR_ERROR, "received length %d is not the correct "
                                       "block size %d\n",
                                       len, rx_block_size_in_bytes);
-                        throw std::runtime_error("skiq_receive length error");
+                        throw std::runtime_error("");
                     }
 
                     // get overload out of metadata
@@ -171,7 +153,7 @@ void SoapySidekiq::rx_receive_operation(void)
                                         "Detected timestamp overflow in RX Sidekiq Thread");
                             SoapySDR_logf(SOAPY_SDR_DEBUG, "expected timestamp %lu, actual %lu",
                                             expected_timestamp, tmp_p_rx_block->rf_timestamp);
-                            exit(1);
+
                             // restart the timestamp checking
                             first = true;
                         }
@@ -186,8 +168,7 @@ void SoapySidekiq::rx_receive_operation(void)
                         expected_timestamp = tmp_p_rx_block->rf_timestamp + rx_payload_size_in_words;
                     }
 
-
-                    // copy the data out of the rx_buffer and into the ring
+                    // copy the data out of the rx_buffer and into the RAM
                     // buffers copy the header in also
                     memcpy(p_rx_block[rxWriteIndex], (void *)tmp_p_rx_block,
                            (num_words_read * sizeof(uint32_t)));
@@ -223,6 +204,7 @@ void SoapySidekiq::rx_receive_operation(void)
             }
         }
     }
+
     SoapySDR_log(SOAPY_SDR_INFO, "Exiting RX Sidekiq Thread");
 }
 
@@ -237,57 +219,44 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
 {
 
     int status = 0;
-    skiq_rx_stream_mode_t stream_mode = skiq_rx_stream_mode_balanced;
-    SoapySDR_logf(SOAPY_SDR_TRACE, "setupStream");
 
-    rx_block_size_in_words = 0;
+    SoapySDR_logf(SOAPY_SDR_TRACE, "setupStream");
 
     if (direction == SOAPY_SDR_RX)
     {
         //  check the channel configuration
         if (channels.size() > 1) 
         {
-            throw std::runtime_error("setupStream invalid channel selection");
+            throw std::runtime_error("only one RX channel is supported simultaneously"); 
         }
 
         rx_hdl = (skiq_rx_hdl_t)channels.at(0);
 
         SoapySDR_logf(SOAPY_SDR_INFO, "The RX handle is: %u", rx_hdl);
                 
-
-        status = skiq_write_rx_stream_mode(card, stream_mode);
-        if (status != 0)
-        {
-            SoapySDR_logf(
-                SOAPY_SDR_ERROR,
-                "Error: unable to set RX stream mode with status %d\n", status);
-        }
-
-        status = skiq_read_rx_block_size(card, stream_mode);
+        status = skiq_read_rx_block_size(card, skiq_rx_stream_mode_balanced);
         if (status < 0)
         {
-            SoapySDR_logf(
-                SOAPY_SDR_ERROR,
-                " failed to read RX block size status %d, with status %d\n",
-                rx_block_size_in_bytes, status);
-            throw std::runtime_error("skiq_read_rx_block_size");
+            SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_read_rx_block_size failed: status: %d\n", 
+                          status);
+            throw std::runtime_error("");
         }
         rx_block_size_in_bytes   = status;
         rx_block_size_in_words   = status / 4;
 
         rx_payload_size_in_bytes = status - SKIQ_RX_HEADER_SIZE_IN_BYTES;
         rx_payload_size_in_words = rx_payload_size_in_bytes / 4;
+
         SoapySDR_logf(SOAPY_SDR_INFO, "Rx payload size in words: %u", rx_payload_size_in_words);
 
-        // allocate the ring buffers
+        // allocate the RAM buffers
         for (int i = 0; i < DEFAULT_NUM_BUFFERS; i++)
         {
             p_rx_block[i] = (skiq_rx_block_t *)malloc(rx_block_size_in_bytes);
             if (p_rx_block[i] == NULL)
             {
-                SoapySDR_log(SOAPY_SDR_ERROR,
-                             " malloc failed to allocate memory ");
-                throw std::runtime_error("malloc failed to allocate memory");
+                SoapySDR_log(SOAPY_SDR_ERROR, "malloc failed to allocate memory ");
+                throw std::runtime_error("");
             }
 
             memset(p_rx_block[i], 0, rx_block_size_in_bytes);
@@ -297,18 +266,17 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
 
         if (format == "CS16")
         {
-            useShort = true;
+            rxUseShort = true;
             SoapySDR_log(SOAPY_SDR_INFO, "Using format CS16\n");
         }
         else if (format == "CF32")
         {
-            useShort = false;
+            rxUseShort = false;
             SoapySDR_log(SOAPY_SDR_INFO, "Using format CF32\n");
         }
         else
         {
-            throw std::runtime_error(
-                "setupStream invalid format '" + format +
+            throw std::runtime_error("setupStream invalid format '" + format +
                 "' -- Only CS16 or CF32 is supported by SoapySidekiq module.");
         }
 
@@ -319,21 +287,22 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
         //  check the channel configuration
         if (channels.size() > 1)
         {
-            throw std::runtime_error("setupStream invalid channel selection");
+            throw std::runtime_error("only one TX channel is supported simultaneously"); 
         }
+
         tx_hdl = (skiq_tx_hdl_t)channels.at(0);
 
         SoapySDR_logf(SOAPY_SDR_INFO, "The TX handle is: %u", tx_hdl);
 
-        //  check the format only support CS16 for now
         if (format == "CS16")
         {
-            useShort = true;
+            txUseShort = true;
             SoapySDR_log(SOAPY_SDR_INFO, "Using format CS16\n");
         }
         else if (format == "CF32")
         {
-            useShort = false;
+
+            txUseShort = false;
             SoapySDR_log(SOAPY_SDR_INFO, "Using format CF32\n");
         }
         else 
@@ -364,7 +333,7 @@ void SoapySidekiq::closeStream(SoapySDR::Stream *stream)
 {
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "closeStream");
-    this->deactivateStream(stream, 0, 0);
+//    this->deactivateStream(stream, 0, 0);
 
     if (stream == RX_STREAM)
     {
@@ -391,8 +360,6 @@ size_t SoapySidekiq::getStreamMTU(SoapySDR::Stream *stream) const
     {
         SoapySDR_logf(SOAPY_SDR_INFO, "block size %u", rx_payload_size_in_words);
 
-        //    return (DEFAULT_NUM_BUFFERS * (rx_block_size_in_words -
-        //    SKIQ_RX_HEADER_SIZE_IN_WORDS));
         return (rx_payload_size_in_words);
     }
     else if (stream == TX_STREAM)
@@ -407,28 +374,96 @@ size_t SoapySidekiq::getStreamMTU(SoapySDR::Stream *stream) const
     return 0;
 }
 
-int SoapySidekiq::activateStream(SoapySDR::Stream *stream, const int flags,
-                                 const long long timeNs, const size_t numElems)
+int SoapySidekiq::activateStream(SoapySDR::Stream *stream, 
+                                 const int flags,
+                                 const long long timeNs, 
+                                 const size_t numElems)
 {
 
     int status = 0;
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "activateStream");
-    if (flags != 0)
-        return SOAPY_SDR_NOT_SUPPORTED;
 
     if (stream == RX_STREAM)
     {
         p_rx_block_index = 0;
 
+        /* set rx source as iq data */
+        if (iq_swap == true)
+        {
+            status = skiq_write_iq_order_mode(card, skiq_iq_order_qi);
+            if (status != 0)
+            {
+                SoapySDR_logf(SOAPY_SDR_ERROR,
+                             "skiq_write_rx_data_src failed (card %u) status %d",
+                              card, status);
+                throw std::runtime_error("");
+            }
+            SoapySDR_logf(SOAPY_SDR_INFO, "RX is set to I then Q order"); 
+        }
+
+        skiq_iq_order_t iq_order;
+        status = skiq_read_iq_order_mode(card, &iq_order);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                         "skiq_read_iq_order_mode failed, (card %u) status %d",
+                         card, status);
+            throw std::runtime_error("");
+        }
+        
+        /* set a modest rx timeout to make skiq_receive blocking*/
+        status = skiq_set_rx_transfer_timeout(card, 100000);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                          "skiq_set_rx_transfer_timeout failed, (card %d) status %d", 
+                          card, status);
+            throw std::runtime_error("");
+        }
+
         //  start the receive thread
         if (!_rx_receive_thread.joinable())
         {
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "Start RX");
+            SoapySDR_logf(SOAPY_SDR_INFO, "Start RX thread");
+
             rx_running = true;
+            start_signal = false;
+
             _rx_receive_thread =
                 std::thread(&SoapySidekiq::rx_receive_operation, this);
         }
+
+        // signal it to start running
+        std::lock_guard<std::mutex> lock(_mutex);
+
+        start_signal = true;
+        _cv.notify_one();  // Notify the thread to run
+
+        /* start rx streaming */
+        if (flags == SOAPY_SDR_HAS_TIME)
+        {
+            status = skiq_start_rx_streaming_on_1pps(card, rx_hdl, 0);
+            if (skiq_start_rx_streaming(card, rx_hdl) != 0)
+            {
+                SoapySDR_logf(SOAPY_SDR_ERROR,
+                              "skiq_start_rx_streaming_on_1pps failed, (card %u) status %d",
+                              card, status);
+                throw std::runtime_error("");
+            }
+        }
+        else
+        {
+            status = skiq_start_rx_streaming(card, rx_hdl);
+            if (skiq_start_rx_streaming(card, rx_hdl) != 0)
+            {
+                SoapySDR_logf(SOAPY_SDR_ERROR,
+                              "skiq_start_rx_streaming failed, (card %u) status %d",
+                              card, status);
+                throw std::runtime_error("");
+            }
+        }
+
     }
     else if (stream == TX_STREAM)
     {
@@ -543,6 +578,12 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
         return SOAPY_SDR_NOT_SUPPORTED;
     }
 
+    if (numElems % rx_payload_size_in_words != 0)
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "numElems must be a multiple of the rx block size "
+                     " numElems %d, block size %u", numElems, rx_payload_size_in_words);
+    }
+
     // if the user didn't give a waittime then wait a LONG time
     if (waitTime == 0)
     {
@@ -560,7 +601,7 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
 
     if (waitTime <= 0)
     {
-        SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out 1");
+        SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out");
         return SOAPY_SDR_TIMEOUT;
     }
 
@@ -617,7 +658,7 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
         uint32_t bytes_left_in_block = words_left_in_block * 4;
 
         // copy in the amount of data we have in the ring block
-        if (useShort == true)
+        if (rxUseShort == true)
         { // CS16
             memcpy(buff_ptr, ringbuffer_ptr, bytes_left_in_block);
         }
@@ -674,7 +715,7 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
         printf("done neg\n");
 #endif
 
-        if (useShort == true)
+        if (rxUseShort == true)
         {
             buff_ptr = buff_ptr + bytes_left_in_block;
         }
@@ -725,7 +766,7 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
 
         uint32_t numElemsLeft_in_bytes = numElemsLeft * 4;
 
-        if (useShort == true)
+        if (rxUseShort == true)
         { // CS16
             memcpy(buff_ptr, ringbuffer_ptr, numElemsLeft_in_bytes);
         }
@@ -841,7 +882,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
 #endif
 
         // determine if we received short or float
-        if (useShort == true)
+        if (txUseShort == true)
         { // CS16
             memcpy(outbuff_ptr, inbuff_ptr, block_bytes_left);
             inbuff_ptr += block_bytes_left;

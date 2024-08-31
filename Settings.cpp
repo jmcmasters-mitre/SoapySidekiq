@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 
+
 std::vector<SoapySDR::Kwargs> SoapySidekiq::sidekiq_devices;
 bool                          SoapySidekiq::rx_running;
 
@@ -46,7 +47,8 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     tx_bandwidth        = (uint32_t)(tx_sample_rate * 0.8);
     tx_center_frequency = 100000000;
 
-    useShort  = true;
+    rxUseShort  = true;
+    txUseShort  = true;
     iq_swap   = true;
     counter   = false;
     debug_ctr = 0;
@@ -622,13 +624,13 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
     if (direction == SOAPY_SDR_RX)
     {
         uint8_t gain_index;
-        status = skiq_read_rx_gain(card, rx_hdl, &gain_index);
+        status = skiq_read_rx_gain(card, this->rx_hdl, &gain_index);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_read_rx_gain (card %d), status %d",
-                          card, status);
-        throw std::runtime_error("");
+                          "Failure: skiq_read_rx_gain (card %u), rx_hdl %u, status %d",
+                          this->card, this->rx_hdl, status);
+            throw std::runtime_error("");
         }
 
         // convert index to  dB based upon the card type
@@ -1207,10 +1209,11 @@ void SoapySidekiq::setBandwidth(const int direction, const size_t channel,
         throw std::runtime_error("");
         }
 
-        if (rx_bandwidth != actual_bw)
+        if (tx_bandwidth != actual_bw)
         {
-            SoapySDR_logf(SOAPY_SDR_WARNING, "requested bandwidth: %d, is not the same as actual bandwidth: %d", 
-                          rx_bandwidth, actual_bw);
+            SoapySDR_logf(SOAPY_SDR_WARNING, "requested bandwidth: %u, " 
+                          " is not the same as actual bandwidth: %u", 
+                          tx_bandwidth, actual_bw);
         }
     }
     else
@@ -1274,6 +1277,13 @@ SoapySDR::ArgInfoList SoapySidekiq::getSettingInfo(void) const
     SoapySDR_logf(SOAPY_SDR_TRACE, "getSettingInfo");
 
     SoapySDR::ArgInfo settingArg;
+
+    settingArg.key         = "max_rx_value";
+    settingArg.value       = "";
+    settingArg.name        = "max value";
+    settingArg.description = "Maximum rx value based upon resolution of the card.";
+    settingArg.type        = SoapySDR::ArgInfo::INT;
+    setArgs.push_back(settingArg);
 
     settingArg.key         = "iq_swap";
     settingArg.value       = "true";
@@ -1423,7 +1433,12 @@ void SoapySidekiq::writeSetting(const std::string &key,
 std::string SoapySidekiq::readSetting(const std::string &key) const
 {
     SoapySDR_logf(SOAPY_SDR_TRACE, "readSetting");
-    if (key == "iq_swap")
+
+    if (key == "max_rx_value")
+    {
+        return std::to_string((int)this->max_value);
+    }
+    else if (key == "iq_swap")
     {
         return iq_swap ? "true" : "false";
     }
@@ -1545,7 +1560,20 @@ bool SoapySidekiq::hasHardwareTime(const std::string &what="") const
 {
     SoapySDR_logf(SOAPY_SDR_TRACE, "hasHardwareTime");
 
-    return true;
+    if (equalsIgnoreCase(what, "rx_rf_timestamp"))
+    {
+        return true;
+    }
+    else if (equalsIgnoreCase(what, "tx_rf_timestamp"))
+    {
+        return true;
+    }
+    else if (equalsIgnoreCase(what, "sys_timestamp"))
+    {
+        return true;
+    }
+
+    return false;
 }
 
 long long SoapySidekiq::getHardwareTime(const std::string &what="") const

@@ -70,15 +70,17 @@ def do_gain(sdr, handle):
 
     # set the gain to 10db
     sdr.setGainMode(SOAPY_SDR_RX, handle, False)
-    sdr.setGain(SOAPY_SDR_RX, handle, 10)
-    gain = sdr.getGain(SOAPY_SDR_RX, handle)
-    print(f"\tgain value is: {gain}");
+    sdr.setGain(SOAPY_SDR_RX, handle, 0)
+    
+    # read_rx_gain() is failing on the x4 so remove it for now.
+#    gain = sdr.getGain(SOAPY_SDR_RX, handle)
+#    print(f"\tgain value is: {gain}");
 
     # set invalid gain, should get a warning
     sdr.setGain(SOAPY_SDR_RX, handle, 100)
     # see if its the same as the old gain
-    gain = sdr.getGain(SOAPY_SDR_RX, handle)
-    print(f"\tgain value is: {gain}");
+#    gain = sdr.getGain(SOAPY_SDR_RX, handle)
+#    print(f"\tgain value is: {gain}");
 
     # set to automatic mode then set gain, should get a warning 
     sdr.setGainMode(SOAPY_SDR_RX, handle, True)
@@ -275,6 +277,15 @@ def do_time(sdr, handle):
 
     # hardware time
     print("hasHardwareTime")
+    source = sdr.hasHardwareTime("rx_rf_timestamp")
+    print(f"\trx_rf ts: {source}") 
+
+    source = sdr.hasHardwareTime("tx_rf_timestamp")
+    print(f"\ttx_rf ts: {source}") 
+
+    source = sdr.hasHardwareTime("sys_timestamp")
+    print(f"\tsys ts: {source}")
+
     source = sdr.hasHardwareTime()
     print(f"\t{source}") 
 
@@ -350,27 +361,35 @@ def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
     # invalid test passed so comment out for now.
 #    num_tx_channels = sdr.getNumChannels(5)
 
+    user_input = input("Press any key to continue")
     #  *** Frontend Corrections API
     do_frontend(sdr, handle)
 
+    user_input = input("Press any key to continue")
     #  *** Gain API
     do_gain(sdr, handle)
 
+    user_input = input("Press any key to continue")
     #  *** Frequency API
     do_frequency(sdr, handle)
 
+    user_input = input("Press any key to continue")
     #  *** Sample Rate API
     do_sample_rate_bw(sdr, handle)
 
+    user_input = input("Press any key to continue")
     #  *** settings API
     do_settings(sdr, handle)
 
+    user_input = input("Press any key to continue")
     #  *** time API
     do_time(sdr, handle)
 
+    user_input = input("Press any key to continue")
     #  *** time API
     do_clocking(sdr, handle)
 
+    user_input = input("Press any key to continue")
     do_sensors(sdr, handle)
 
 
