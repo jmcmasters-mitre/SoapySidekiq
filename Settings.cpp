@@ -57,6 +57,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     rx_block_size_in_bytes = 0;
     rx_payload_size_in_words = 1018;
     rx_payload_size_in_bytes = 0;
+    rf_time_source = true;
     timetype = "rf_timestamp";
 
     //  this may change later according to format
@@ -1412,10 +1413,12 @@ void SoapySidekiq::writeSetting(const std::string &key,
         if (value == "rf_timestamp")
         { 
             timetype = "rf_timestamp";
+            rf_time_source = true;
         }
         else if (value == "sys_timestamp")
         {
             timetype = "sys_timestamp";
+            rf_time_source = false;
         }
         else 
         {

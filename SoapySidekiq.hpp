@@ -187,9 +187,8 @@ class SoapySidekiq : public SoapySDR::Device
     SoapySDR::Stream *const RX_STREAM = (SoapySDR::Stream *)0x2;
 
     //  sidekiq card
-    std::string part_str;
-    skiq_part_t part;
-
+    std::string             part_str;
+    skiq_part_t             part;
     uint8_t                 card{};
     std::basic_string<char> serial{};
     std::basic_string<char> timeSource{};
@@ -199,6 +198,7 @@ class SoapySidekiq : public SoapySDR::Device
     bool     rxUseShort{};
     bool     txUseShort{};
     uint32_t debug_ctr{};
+    bool     rf_time_source;
 
     //  rx
     std::mutex _mutex;

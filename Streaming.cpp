@@ -147,7 +147,7 @@ void SoapySidekiq::rx_receive_operation(void)
                     // check for timestamp error
                     if (first == false)
                     {
-                        if( expected_timestamp != tmp_p_rx_block->rf_timestamp)
+                        if(expected_timestamp != tmp_p_rx_block->rf_timestamp)
                         {
                             SoapySDR_log(SOAPY_SDR_WARNING,
                                         "Detected timestamp overflow in RX Sidekiq Thread");
@@ -605,221 +605,82 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
         return SOAPY_SDR_TIMEOUT;
     }
 
-    // The numElems may be smaller or bigger than our receive buffer length
-    // if smaller we will need to send multiple responses for one receive buffer
-    // if bigger we will have to wait for multiple receive buffers to be
-    // received before we return
-    size_t numElemsLeft = numElems;
-    char * buff_ptr     = (char *)buffs[0];
-
-    // we need to handle the case where we left in the middle of a ring buffer
-    // the p_rx_block_index is != 0 if that is the case
-    uint32_t words_left_in_block =
-        rx_payload_size_in_words - (p_rx_block_index / 4);
-    char *ringbuffer_ptr =
-        (char *)(((char *)p_rx_block[rxReadIndex]->data) + p_rx_block_index);
-
-    // determine if we have more words in the ring buffer block than we need (or
-    // equal)
-    while (numElemsLeft >= words_left_in_block)
+    char *buff_ptr = (char *)buffs[0];
+    skiq_rx_block_t *block_ptr = p_rx_block[rxReadIndex];
+    char *ringbuffer_ptr = (char *)((char *)block_ptr->data);
+    
+    if (this->rf_time_source == true)
     {
-//#define debug
-#ifdef debug
-        char *last_buff_ptr       = buff_ptr;
-        char *last_ringbuffer_ptr = ringbuffer_ptr;
-        SoapySDR_logf(
-            SOAPY_SDR_DEBUG,
-            "1 p_rx_block_index %d, numElemsLeft %d, words_left_in_block %d",
-            p_rx_block_index, numElemsLeft, words_left_in_block);
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "rxReadIndex %d, rxWriteIndex %d",
-                      rxReadIndex, rxWriteIndex);
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "buff_ptr %p, ringbuffer_ptr %p",
-                      buff_ptr, ringbuffer_ptr);
-        SoapySDR_logf(SOAPY_SDR_DEBUG,
-                      "size of float %d buff_ptr delta %ld, ringbuffer_ptr %ld",
-                      sizeof(float), buff_ptr - last_buff_ptr,
-                      ringbuffer_ptr - last_ringbuffer_ptr);
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "in rf_timesource");
+        timeNs = block_ptr->rf_timestamp;
+    }
+    else
+    {
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "in sys_timesource, %lu", block_ptr->sys_timestamp);
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "rf_timestamp, %lu", block_ptr->rf_timestamp);
+        timeNs = block_ptr->sys_timestamp;
+    }
 
-        last_ringbuffer_ptr = ringbuffer_ptr;
-        last_buff_ptr       = buff_ptr;
 
-        //    SoapySDR_logf(SOAPY_SDR_DEBUG, "ringbuffer %p, ringbuffer_ptr %p",
-        //    p_rx_block[rxReadIndex]->data , ringbuffer_ptr);
-        //    SoapySDR_logf(SOAPY_SDR_DEBUG, "rx_payload_size_in_words, %d",
-        //    rx_payload_size_in_words);
+    // move to the next buffer in the ring
+    rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
 
-        if (debug_ctr % 1000 == 0)
-        {
-            printf(" %u\n", debug_ctr);
-        }
-        debug_ctr++;
-#endif
+    uint32_t block_num = 0;
+    uint32_t num_blocks = numElems / rx_payload_size_in_words;
 
-        uint32_t bytes_left_in_block = words_left_in_block * 4;
-
+    while (block_num < num_blocks)
+    {
         // copy in the amount of data we have in the ring block
         if (rxUseShort == true)
-        { // CS16
-            memcpy(buff_ptr, ringbuffer_ptr, bytes_left_in_block);
+        {
+//            SoapySDR_logf(SOAPY_SDR_DEBUG, "block num %u, first value %d", block_num, (int16_t )buff_ptr[0]);
+
+            // CS16
+            memcpy(buff_ptr, ringbuffer_ptr, rx_payload_size_in_bytes);
         }
         else
-        { // float
+        { 
+            // CF32 float
             float *  dbuff_ptr = (float *)buff_ptr;
-            int16_t *source    = (int16_t *)ringbuffer_ptr;
-
+            int16_t *source = (int16_t *)ringbuffer_ptr;
             int short_ctr = 0;
-            for (uint32_t i = 0; i < words_left_in_block; i++)
+
+            for (uint32_t i = 0; i < rx_payload_size_in_bytes; i++)
             {
                 *dbuff_ptr++ = (float)source[short_ctr + 1] / this->max_value;
                 *dbuff_ptr++ = (float)source[short_ctr] / this->max_value;
-#ifdef debug3
-                if (i < 1)
-                {
-
-                    printf("1 I read %d, real %f, calc_int %f\n",
-                           source[short_ctr], *(dbuff_ptr - 2),
-                           (*(dbuff_ptr - 2) * this->max_value));
-                    printf("1 Q read %d, real %f, calc_int %f\n\n",
-                           source[short_ctr + 1], *(dbuff_ptr - 1),
-                           (*(dbuff_ptr - 1) * this->max_value));
-                }
-#endif
                 short_ctr += 2;
             }
-
-            buff_ptr = (char *)dbuff_ptr;
         }
+    
+        // a block is done, so move counter.
+        block_num++;
 
-#ifdef debug2
-        int16_t *temp_ptr = (int16_t *)ringbuffer_ptr;
-        /*
-        for (int i=0; i < 10; i++) {
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "A 0x%04X, %d ", *temp_ptr,
-        *temp_ptr); temp_ptr++;
-        }
-        printf("done \n");
-
-        */
-        uint32_t words_left = words_left_in_block - 1;
-
-        temp_ptr = (int16_t *)(ringbuffer_ptr + (bytes_left_in_block - 4));
-        ptrdiff_t diff = (uint8_t *)temp_ptr - (uint8_t *)ringbuffer_ptr;
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "tmp_ptr %p, diff %d", temp_ptr, diff);
-
-        for (int i = 0; i < 10; i++)
+        // if we need more blocks get the next one
+        if (block_num < num_blocks)
         {
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "A %d %p, 0x%04X, %d ", words_left--,
-                          temp_ptr, *temp_ptr, *temp_ptr);
-            temp_ptr--;
-        }
-        printf("done neg\n");
-#endif
-
-        if (rxUseShort == true)
-        {
-            buff_ptr = buff_ptr + bytes_left_in_block;
-        }
-
-        numElemsLeft -= words_left_in_block;
-
-        // move to the next buffer in the ring
-        rxReadIndex      = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
-        p_rx_block_index = 0;
-
-        if (numElemsLeft == 0)
-        {
-            break;
-        }
-
-        // if no more data in ring buffer wait
-        while ((rxReadIndex == rxWriteIndex) && (waitTime > 0))
-        {
-            usleep(DEFAULT_SLEEP_US);
-            waitTime -= DEFAULT_SLEEP_US;
-        }
-        if (waitTime <= 0)
-        {
-            SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out 2");
-            return SOAPY_SDR_TIMEOUT;
-        }
-        words_left_in_block = rx_payload_size_in_words;
-        ringbuffer_ptr =
-            (char *)p_rx_block[rxReadIndex]->data + p_rx_block_index;
-    }
-
-    // we are here if we either finished the loop above or the amount left to
-    // copy is less than what we have in the block received. if we are here then
-    // there is at least one ring buffer available and we can send it without
-    // waiting
-    if (numElemsLeft < words_left_in_block && numElemsLeft != 0)
-    {
-#ifdef debug
-        SoapySDR_logf(SOAPY_SDR_DEBUG,
-                      "2 numElemsLeft %d, words_left_in_block %d", numElemsLeft,
-                      words_left_in_block);
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "rxReadIndex %d, rxWriteIndex %d",
-                      rxReadIndex, rxWriteIndex);
-
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "buff_ptr %p, ringbuffer_ptr %p",
-                      buff_ptr, ringbuffer_ptr);
-#endif
-
-        uint32_t numElemsLeft_in_bytes = numElemsLeft * 4;
-
-        if (rxUseShort == true)
-        { // CS16
-            memcpy(buff_ptr, ringbuffer_ptr, numElemsLeft_in_bytes);
-        }
-        else
-        { // float
-            float *  dbuff_ptr = (float *)buff_ptr;
-            int16_t *source    = (int16_t *)ringbuffer_ptr;
-
-            int short_ctr = 0;
-            for (uint32_t i = 0; i < numElemsLeft; i++)
+            // get next block if available otherwise wait
+            while ((rxReadIndex == rxWriteIndex) && (waitTime > 0))
             {
-                *dbuff_ptr++ = (float)(source[short_ctr] / this->max_value);
-                *dbuff_ptr++ = (float)(source[short_ctr + 1] / this->max_value);
-//#define debug3
-#ifdef debug3
-                if (i < 2)
-                {
-
-                    printf("2 I read %d, real %f, dbuff_ptr %p\n",
-                           source[short_ctr], *(dbuff_ptr - 2),
-                           (dbuff_ptr - 2));
-                    printf("2 Q read %d, real %f, dbuff_ptr %p\n",
-                           source[short_ctr + 1], *(dbuff_ptr - 1),
-                           (dbuff_ptr - 1));
-                }
-#endif
-
-                short_ctr += 2;
+                // wait
+                usleep(DEFAULT_SLEEP_US);
+                waitTime -= DEFAULT_SLEEP_US;
+                p_rx_block_index = 0;
             }
-        }
 
-#ifdef debug2
-        int16_t *temp_ptr = (int16_t *)buff_ptr;
-        /*
-        for (int i=0; i < 10; i++) {
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "B 0x%04X, ", *temp_ptr);
-            temp_ptr++;
-        }
-        printf("done \n");
-        */
-        uint32_t words_left = words_left_in_block - 1;
+            if (waitTime <= 0)
+            {
+                SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out");
+                return SOAPY_SDR_TIMEOUT;
+            }
 
-        temp_ptr = (int16_t *)(buff_ptr + numElemsLeft_in_bytes - 4);
-        for (int i = 0; i < 10; i++)
-        {
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "A %d %p, 0x%04X, %d ", words_left--,
-                          temp_ptr, *temp_ptr, *temp_ptr);
-            temp_ptr--;
+            buff_ptr +=  rx_payload_size_in_bytes;
+            block_ptr = p_rx_block[rxReadIndex];
+            ringbuffer_ptr = (char *)((char *)block_ptr->data);
+
+            // move to the next buffer in the ring
+            rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
         }
-        printf("done neg\n");
-#endif
-        // keep this around for the next call
-        p_rx_block_index += numElemsLeft_in_bytes;
     }
 
     // if we are here then we have put NumElems into the buffer
