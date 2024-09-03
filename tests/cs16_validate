@@ -1,0 +1,219 @@
+#!/bin/python3
+
+import sys
+import time
+import argparse
+import numpy as np
+import SoapySDR
+print(SoapySDR, __file__)
+from SoapySDR import *
+
+np.set_printoptions(threshold=sys.maxsize)
+
+############################################################################################
+# Settings
+############################################################################################
+# Data transfer settings
+NUM_BUFF = 10
+NUM_BLOCKS = 4
+rx_handle = 0             # RX1 = 0, RX2 = 1
+use_agc = True          # Use or don't use the AGC
+timeout_us = int(10e6)
+
+def get_blocks(buff, rx_stream, N, flag, rate):
+    first = True
+
+    expected_timestamp = 0
+
+    for idx1 in range(NUM_BUFF):
+        print("read block", idx1)
+
+        sr = sdr.readStream(rx_stream, [buff[idx1]], N)
+        print(f"expected ts: {expected_timestamp:,},  actual ts: {sr.timeNs:,}")
+
+        rc = sr.ret # number of samples read or the error code
+        assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
+
+        actual = sr.timeNs
+        delta = actual - expected_timestamp
+        ratio = 40e6 / rate
+        adder = ratio * N
+        
+        if first:
+            first = False
+        else:
+
+            if flag == "rf":
+                if expected_timestamp != actual:
+                    print(f"timestamp failure, expected: {expected_timestamp}, actual {actual}")
+                    exit(-1)
+            else:
+                if expected_timestamp != actual and expected_timestamp != actual - 1:
+                    print(f"timestamp failure, expected: {expected_timestamp:,}, actual {actual:,}")
+                    print(f"delta: {delta:,}, rate {rate:,}, ratio {ratio}, N {N:,}, adder {int(adder):,}")
+                    print(f"delta + addr {delta + int(adder)}")
+
+
+        if flag == "rf":
+            expected_timestamp = sr.timeNs + N 
+        else:
+            expected_timestamp = sr.timeNs + int(adder) 
+
+
+
+def analyze_blocks(buff, rx_stream, N, max_int):
+    print("analyzing blocks", flush=True)
+
+    for i in range(NUM_BUFF):
+        print(f"analyze block {i}", flush=True)
+
+        expected = buff[i][0]
+
+        #validate samples
+        for j in range(((2 * N) - 1)):
+            this_value = buff[i][j]
+
+            if (this_value != expected):
+                print(f"Bad Value: i {i}, j {j}, expected {expected}, value {this_value}")
+
+                #error print the buffer around the error
+                for k in range(-5, 5):
+                    print((j + k), " ", buff[i][j+k])
+                exit()
+
+            expected = (this_value + 1)
+            if expected == (max_int + 1):
+                expected = -(max_int + 1)
+
+
+
+############################################################################################
+# Receive Signal
+############################################################################################
+def main(cardno, rx_handle, rate, bw, freq):
+    global running, sdr, rx_stream
+
+    args = dict(card = cardno)
+    #    args = dict(serial = '8N55')
+
+    sdr = SoapySDR.Device(args)
+
+    SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
+
+    # determine max value based upon resolution
+    max_value = sdr.readSetting("max_rx_value")
+
+    print("max value based upon resolution", max_value)
+
+    max_int = int(max_value)
+
+
+    # set the radio to use FPGA counter mode
+    sdr.writeSetting("counter", "true")
+    setting = sdr.readSetting("counter")
+    print("read counter", setting)
+
+    sdr.setSampleRate(SOAPY_SDR_RX, rx_handle, rate)          # Set sample rate
+    sdr.setBandwidth(SOAPY_SDR_RX, rx_handle, (rate * 0.8))   # Set bandwidth rate
+    sdr.setGainMode(SOAPY_SDR_RX, rx_handle, use_agc)       # Set the gain mode to automatic
+    sdr.setFrequency(SOAPY_SDR_RX, rx_handle, freq)         # Tune the LO
+
+    ### validate rf timestamps 
+    sdr.writeSetting("timetype", "rf_timestamp")
+    setting = sdr.readSetting("timetype")
+    print("read timetype", setting)
+
+    print("\n*** Note: using rf timestamps")
+
+    # Create data buffer and start streaming samples to it
+    rx_stream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, [rx_handle])  # Setup data stream
+
+    # create a re-usable buffer for receiving samples
+    MTU = sdr.getStreamMTU(rx_stream) 
+    
+    print("Stream MTU",  MTU)
+
+    N = MTU * NUM_BLOCKS
+    print(f"NumBlocks {NUM_BLOCKS} NumElms {N}, num shorts {N * 2}")
+
+    buff = np.empty([NUM_BUFF, 2 * N], dtype=np.int16)
+    print(f"buff shape {buff.shape}")
+
+    # reset the timestamps
+    sdr.setHardwareTime(0, "now")
+
+    # start streaming
+    sdr.activateStream(rx_stream)  
+
+    get_blocks(buff, rx_stream, N, "rf", rate)
+
+    # stop streaming
+    sdr.deactivateStream(rx_stream)
+    sdr.closeStream(rx_stream)
+
+    analyze_blocks(buff, rx_stream, N, max_int)
+   
+    ### validate sys timestamps 
+    # Create data buffer and start streaming samples to it
+    rx_stream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, [rx_handle])  # Setup data stream
+
+    sdr.writeSetting("timetype", "sys_timestamp")
+    setting = sdr.readSetting("timetype")
+    print("read timetype", setting)
+
+    ref_rate = sdr.getReferenceClockRate()
+    print(f"ref rate is {int(ref_rate)}")
+
+
+    print("\n*** Note: using system timestamps means the expected timestamp may be off by 1 tick")
+
+    # reset the timestamps
+    sdr.setHardwareTime(0, "now")
+
+    # start the streaming
+    sdr.activateStream(rx_stream)  
+
+    get_blocks(buff, rx_stream, N, "sys", rate)
+
+    # stop the streaming
+    sdr.deactivateStream(rx_stream)
+    sdr.closeStream(rx_stream)
+
+    analyze_blocks(buff, rx_stream, N, max_int)
+
+
+def parse_command_line_arguments():
+    """ Create command line options """
+    help_formatter = argparse.ArgumentDefaultsHelpFormatter
+    parser = argparse.ArgumentParser(description='Test cf32 receive ',
+                                     formatter_class=help_formatter)
+    parser.add_argument('-c', required=False, dest='card',
+                        default='0', help=' Card')
+    parser.add_argument('-handle', type=int, required=False, dest='handle',
+                        default=0, help=' Channel')
+    parser.add_argument('-r', type=float, required=False, dest='rate',
+                        default=20e6, help='Sample Rate')
+    parser.add_argument('-bw', type=float, required=False, dest='bw',
+                        default=18e6, help='Bandwidth')
+    parser.add_argument('-f', type=float, required=False, dest='freq',
+                        default=1000e6, help='Frequency')
+
+    return parser.parse_args(sys.argv[1:])
+
+
+if __name__ == '__main__':
+
+    pars = parse_command_line_arguments()
+
+    if (pars.rate <= pars.bw):
+        print("Warning: Bandwidth must be smaller than the sample rate, Setting bandwidth to 80% of sample rate.")
+
+        pars.bw = 0.8 * pars.rate
+
+    print("card (-c)\t\t:", pars.card, "\t\t\thandle (-handle)\t\t:", pars.handle)
+    print("sample rate (-s)\t:", pars.rate/1000000, "M","\t\tbandwidth (-bw)\t\t:", pars.bw/1000000, "M")
+    print("freq (-f)\t:", pars.freq/1000000)
+
+    main(pars.card, pars.handle, pars.rate, pars.bw, pars.freq)
+
+
