@@ -187,40 +187,46 @@ class SoapySidekiq : public SoapySDR::Device
     SoapySDR::Stream *const RX_STREAM = (SoapySDR::Stream *)0x2;
 
     //  sidekiq card
-    std::string             part_str;
-    skiq_part_t             part;
-    uint8_t                 card{};
+    std::string part_str;
+    skiq_part_t part;
+    skiq_param_t param;
+    uint8_t card{};
     std::basic_string<char> serial{};
     std::basic_string<char> timeSource{};
-    uint32_t                resolution{};
-    double                  max_value{};
+    uint32_t resolution{};
+    double max_value{};
 
-    bool     rxUseShort{};
-    bool     txUseShort{};
+    bool rxUseShort{};
+    bool txUseShort{};
     uint32_t debug_ctr{};
-    bool     rf_time_source;
+    bool rf_time_source;
 
     //  rx
-    std::mutex _mutex;
+    std::mutex rx_mutex;
     std::condition_variable _cv;
     std::basic_string<char> timetype{};
     static bool   rx_running;
 
-    uint8_t       num_rx_channels{};
+    uint8_t num_rx_channels{};
     skiq_rx_hdl_t rx_hdl{};
-    uint64_t      rx_center_frequency{};
-    uint32_t      rx_sample_rate{}, rx_bandwidth{};
-    uint32_t      rx_block_size_in_words{};
-    uint32_t      rx_block_size_in_bytes{};
-    uint32_t      rx_payload_size_in_bytes{};
-    uint32_t      rx_payload_size_in_words{};
+    uint64_t rx_center_frequency{};
+    uint32_t rx_sample_rate{}, rx_bandwidth{};
+    uint32_t rx_block_size_in_words{};
+    uint32_t rx_block_size_in_bytes{};
+    uint32_t rx_payload_size_in_bytes{};
+    uint32_t rx_payload_size_in_words{};
 
     //  tx
-    uint8_t       num_tx_channels{};
-    skiq_tx_hdl_t tx_hdl;
-    uint64_t      tx_center_frequency{};
-    uint32_t      tx_sample_rate{}, tx_bandwidth{};
-    uint32_t      tx_underruns{};
+    std::mutex tx_buf_mutex;
+    std::mutex space_avail_mutex;
+    std::condition_variable space_avail_cond;
+    bool ready;
+
+    uint8_t  num_tx_channels{};
+    skiq_tx_hdl_t tx_hdl{};
+    uint64_t tx_center_frequency{};
+    uint32_t tx_sample_rate{}, tx_bandwidth{};
+    uint32_t tx_underruns{};
 
     //  setting
     bool iq_swap{};
@@ -229,19 +235,28 @@ class SoapySidekiq : public SoapySDR::Device
 
     // RX buffer
     skiq_rx_block_t *p_rx_block[DEFAULT_NUM_BUFFERS];
-    uint32_t         rxReadIndex{};
-    uint32_t         rxWriteIndex{};
-    uint32_t         p_rx_block_index{};
+    uint32_t rxReadIndex{};
+    uint32_t rxWriteIndex{};
 
     // TX buffer
     skiq_tx_block_t *p_tx_block[DEFAULT_NUM_BUFFERS];
-    uint32_t         currTXBuffIndex{};
-    uint32_t         p_tx_block_index{};
+    uint32_t currTXBuffIndex{};
+    uint32_t p_tx_block_index{};
 
+    // Static function used as a callback
+    static void static_tx_complete_callback(int32_t status, skiq_tx_block_t *p_data, void *p_user) 
+    {
+    // Cast the user data back to the SoapySidekiq instance
+    SoapySidekiq *self = static_cast<SoapySidekiq*>(p_user);
+    // Call the member function
+    self->tx_complete(status, p_data, p_user);
+    }
   public:
     //  receive thread
+    uint32_t complete_count{};
     std::thread _rx_receive_thread;
-    void        rx_receive_operation(void);
+    void rx_receive_operation(void);
+    void tx_complete(int32_t status, skiq_tx_block_t *p_data, void *p_user);
 
     static std::vector<SoapySDR::Kwargs> sidekiq_devices;
 };

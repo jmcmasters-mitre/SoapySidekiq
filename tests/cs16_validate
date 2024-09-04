@@ -20,7 +20,7 @@ rx_handle = 0             # RX1 = 0, RX2 = 1
 use_agc = True          # Use or don't use the AGC
 timeout_us = int(10e6)
 
-def get_blocks(buff, rx_stream, N, flag, rate):
+def get_blocks(buff, rx_stream, N, flag, rate, sys_freq):
     first = True
 
     expected_timestamp = 0
@@ -34,14 +34,14 @@ def get_blocks(buff, rx_stream, N, flag, rate):
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
 
-        actual = sr.timeNs
-        delta = actual - expected_timestamp
-        ratio = 40e6 / rate
-        adder = ratio * N
         
         if first:
             first = False
         else:
+            actual = sr.timeNs
+            delta = actual - expected_timestamp
+            ratio = sys_freq / rate
+            adder = ratio * N
 
             if flag == "rf":
                 if expected_timestamp != actual:
@@ -139,13 +139,17 @@ def main(cardno, rx_handle, rate, bw, freq):
     buff = np.empty([NUM_BUFF, 2 * N], dtype=np.int16)
     print(f"buff shape {buff.shape}")
 
+    setting = sdr.readSetting("sys_clock_freq")
+    ref_rate = int(setting)
+    print(f"sys rate is {ref_rate}")
+
     # reset the timestamps
     sdr.setHardwareTime(0, "now")
 
     # start streaming
     sdr.activateStream(rx_stream)  
 
-    get_blocks(buff, rx_stream, N, "rf", rate)
+    get_blocks(buff, rx_stream, N, "rf", rate, ref_rate)
 
     # stop streaming
     sdr.deactivateStream(rx_stream)
@@ -161,8 +165,6 @@ def main(cardno, rx_handle, rate, bw, freq):
     setting = sdr.readSetting("timetype")
     print("read timetype", setting)
 
-    ref_rate = sdr.getReferenceClockRate()
-    print(f"ref rate is {int(ref_rate)}")
 
 
     print("\n*** Note: using system timestamps means the expected timestamp may be off by 1 tick")
@@ -173,7 +175,7 @@ def main(cardno, rx_handle, rate, bw, freq):
     # start the streaming
     sdr.activateStream(rx_stream)  
 
-    get_blocks(buff, rx_stream, N, "sys", rate)
+    get_blocks(buff, rx_stream, N, "sys", rate, ref_rate)
 
     # stop the streaming
     sdr.deactivateStream(rx_stream)

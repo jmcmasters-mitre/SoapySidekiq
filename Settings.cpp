@@ -1,12 +1,53 @@
 #include "SoapySidekiq.hpp"
 #include <SoapySDR/Formats.hpp>
-#include <cstring> // memcpy
+#include <cstring> 
+#include <cinttypes> 
 #include <iostream>
 #include <vector>
 #include <string>
 #include <sidekiq_types.h>
 #include <unistd.h>
 
+/*****************************************************************************/
+  /** This is the callback function for once the data has completed being sent.
+      There is no guarantee that the complete callback will be in the order that
+      the data was sent, this function just increments the completion count and
+      signals the main thread that there is space available to send more packets.
+  
+      @param status status of the transmit packet completed
+      @param p_block reference to the completed transmit block
+      @param p_user reference to the user data
+      @return void
+ */
+void SoapySidekiq::tx_complete( int32_t status, skiq_tx_block_t *p_data, void *p_user )
+{
+    if(status != 0)
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "packet %" PRIu32 " failed with status %d\n",
+                this->complete_count, status);
+    }
+
+    // increment the packet completed count
+    this->complete_count++;
+
+    tx_buf_mutex.lock();
+
+    // update the in use status of the packet just completed
+    if (p_user)
+    {
+        *(int32_t*)p_user = 0;
+    }
+    tx_buf_mutex.unlock();
+    
+
+    // signal to the other thread that there may be space available now that a
+    // packet send has completed
+    std::unique_lock<std::mutex> lock(space_avail_mutex);
+
+    // Signal the condition variable
+    ready = true;
+    space_avail_cond.notify_one();
+}
 
 
 std::vector<SoapySDR::Kwargs> SoapySidekiq::sidekiq_devices;
@@ -28,7 +69,6 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
 {
     int status = 0;
     uint8_t channels = 0;
-    skiq_param_t param;
     skiq_iq_order_t iq_order;
 
     /* We need to set some default parameters in case the user does not */
@@ -103,7 +143,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         throw std::runtime_error("");
     }
 
-    status = skiq_read_parameters(card, &param);
+    status = skiq_read_parameters(card, &this->param);
     if (status != 0)
     {
         SoapySDR_logf(SOAPY_SDR_ERROR, "card %u, skiq_read_parameters failed, status %d",
@@ -171,6 +211,20 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
 
     SoapySDR_logf(SOAPY_SDR_INFO, "card: %d, card resolution: %d bits, max ADC value: %d", 
                   card, this->resolution, (uint64_t) this->max_value); 
+
+     // register the callback
+     //status = skiq_register_tx_complete_callback( card, &SoapySidekiq::tx_complete );
+     status = skiq_register_tx_complete_callback(card, 
+             &SoapySidekiq::static_tx_complete_callback);
+//             static_cast<void (*)(int32_t, skiq_tx_block_t*, void*)>(&SoapySidekiq::tx_complete));
+ 
+     if( status != 0 )
+     {
+         SoapySDR_logf(SOAPY_SDR_ERROR, "unable to register transmit completion callback"
+                 " status: %" PRIi32, status);
+        throw std::runtime_error("");
+     }
+
 }
 
 SoapySidekiq::~SoapySidekiq(void)
@@ -1303,7 +1357,7 @@ SoapySDR::ArgInfoList SoapySidekiq::getSettingInfo(void) const
     settingArg.key         = "log";
     settingArg.value       = "false";
     settingArg.name        = "log";
-    settingArg.description = "Set the Log Level";
+    settingArg.description = "Set the SoapySDR Log Level";
     settingArg.type        = SoapySDR::ArgInfo::STRING;
     setArgs.push_back(settingArg);
 
@@ -1314,6 +1368,12 @@ SoapySDR::ArgInfoList SoapySidekiq::getSettingInfo(void) const
     settingArg.type        = SoapySDR::ArgInfo::STRING;
     setArgs.push_back(settingArg);
 
+    settingArg.key         = "sys_clock_freq";
+    settingArg.value       = "sys_freq";
+    settingArg.name        = "timetype";
+    settingArg.description = "The frequency of the system timestamp clock";
+    settingArg.type        = SoapySDR::ArgInfo::STRING;
+    setArgs.push_back(settingArg);
     return setArgs;
 }
 
@@ -1456,6 +1516,22 @@ std::string SoapySidekiq::readSetting(const std::string &key) const
     else if (key == "timetype")
     {
         return timetype;
+    }
+    else if (key == "sys_clock_freq")
+    {
+        int status = 0;
+        uint64_t sys_freq = 0;
+
+        status = skiq_read_sys_timestamp_freq(this->card, &sys_freq);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                          "skiq_read_sys_timestamp_freq failed: (card %d), status %d", 
+                          card, status);
+            throw std::runtime_error("");
+        }
+
+        return std::to_string((uint64_t)sys_freq);
     }
     else
     {
@@ -1771,15 +1847,25 @@ double SoapySidekiq::getReferenceClockRate(void) const
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "skiq_write_ref_clock_select failed: (card %d), status %d", card, status);
+                          "skiq_write_ref_clock_select failed: (card %d), status %d", 
+                          card, status);
             throw std::runtime_error("");
         }
         return ref_clock;
     }
     else if (equalsIgnoreCase(source, "internal_clock"))
     {
-        // all internal clocks are 40M
-        return 40000000;
+        uint64_t sys_freq = 0;
+        status = skiq_read_sys_timestamp_freq(this->card, &sys_freq);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                          "skiq_read_sys_timestamp_freq failed: (card %d), status %d", 
+                          card, status);
+            throw std::runtime_error("");
+        }
+
+        return sys_freq;
     }
     else
     {

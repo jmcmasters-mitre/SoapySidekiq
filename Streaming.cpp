@@ -97,7 +97,7 @@ void SoapySidekiq::rx_receive_operation(void)
     uint64_t      overload = 0;
     skiq_rx_hdl_t rcvd_hdl;
 
-    std::unique_lock<std::mutex> lock(_mutex);
+    std::unique_lock<std::mutex> lock(rx_mutex);
 
     SoapySDR_log(SOAPY_SDR_TRACE, "entering rx_receive_thread");
 
@@ -119,7 +119,6 @@ void SoapySidekiq::rx_receive_operation(void)
                           "rxReadIndex %d, rxWriteIndex %d, overload %d\n",
                           rxReadIndex, rxWriteIndex, overload);
             rxWriteIndex     = rxReadIndex;
-            p_rx_block_index = 0;
         }
         else
         {
@@ -199,7 +198,7 @@ void SoapySidekiq::rx_receive_operation(void)
                     SoapySDR_logf(SOAPY_SDR_FATAL,
                                   "Failure: skiq_receive (card %d) status %d",
                                   card, status);
-                    throw std::runtime_error("skiq_receive error");
+                    throw std::runtime_error("");
                 }
             }
         }
@@ -386,8 +385,6 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
 
     if (stream == RX_STREAM)
     {
-        p_rx_block_index = 0;
-
         /* set rx source as iq data */
         if (iq_swap == true)
         {
@@ -435,7 +432,7 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         }
 
         // signal it to start running
-        std::lock_guard<std::mutex> lock(_mutex);
+        std::lock_guard<std::mutex> lock(rx_mutex);
 
         start_signal = true;
         _cv.notify_one();  // Notify the thread to run
@@ -582,6 +579,7 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     {
         SoapySDR_logf(SOAPY_SDR_ERROR, "numElems must be a multiple of the rx block size "
                      " numElems %d, block size %u", numElems, rx_payload_size_in_words);
+        throw std::runtime_error("");
     }
 
     // if the user didn't give a waittime then wait a LONG time
@@ -596,7 +594,6 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
         // wait
         usleep(DEFAULT_SLEEP_US);
         waitTime -= DEFAULT_SLEEP_US;
-        p_rx_block_index = 0;
     }
 
     if (waitTime <= 0)
@@ -611,13 +608,10 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     
     if (this->rf_time_source == true)
     {
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "in rf_timesource");
         timeNs = block_ptr->rf_timestamp;
     }
     else
     {
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "in sys_timesource, %lu", block_ptr->sys_timestamp);
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "rf_timestamp, %lu", block_ptr->rf_timestamp);
         timeNs = block_ptr->sys_timestamp;
     }
 
@@ -665,7 +659,6 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
                 // wait
                 usleep(DEFAULT_SLEEP_US);
                 waitTime -= DEFAULT_SLEEP_US;
-                p_rx_block_index = 0;
             }
 
             if (waitTime <= 0)
@@ -699,6 +692,13 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
     if (stream != TX_STREAM)
     {
         return SOAPY_SDR_NOT_SUPPORTED;
+    }
+
+    if (numElems % DEFAULT_TX_BUFFER_LENGTH != 0)
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "numElems must be a multiple of the tx MTU size "
+                     " numElems %d, block size %u", numElems, DEFAULT_TX_BUFFER_LENGTH);
+        throw std::runtime_error("");
     }
 
     // Pointer to the location in the input buffer to transmit from

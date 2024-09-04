@@ -19,6 +19,7 @@ def make_tone(n, make_float, fcen, fs, phi=0.285):
     discontinuity.
     """
     period = fs / fcen
+
     #assert n % period == 0, 'Total samples not integer number of periods'
     a = (2**12 / 2) -1
     # Make Complex Valued Tone Signal
@@ -38,9 +39,9 @@ def make_tone(n, make_float, fcen, fs, phi=0.285):
         return sig_int16
 
 
-def main(cardno=0, serial=None, handle=0, 
-         rate=20e6, bw=None, freq=1e7, 
-         attenuation=100, make_float=False, offset=None):
+def main(cardno, serial, handle, 
+         rate, bw, freq, 
+         attenuation, make_float, offset):
 
     if serial is None:
         args = dict(card = cardno)
@@ -127,7 +128,7 @@ def parse_command_line_arguments():
     parser.add_argument('-f', type=float, required=False, dest='freq',
                         default=1000e6, help='LO Frequency')
     parser.add_argument('--offset', type=float, required=False, dest='offset',
-                        default=None, help='Offset from LO')
+                        default=2e6, help='Offset from LO')
     parser.add_argument('-a', type=int, required=False, dest='attenuation',
                         default=0, help='TX attenuation')
     
