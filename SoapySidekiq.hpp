@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <pthread.h>
 
 #include <SoapySDR/Device.hpp>
 #include <SoapySDR/Logger.hpp>
@@ -218,15 +219,19 @@ class SoapySidekiq : public SoapySDR::Device
 
     //  tx
     std::mutex tx_buf_mutex;
-    std::mutex space_avail_mutex;
-    std::condition_variable space_avail_cond;
-    bool ready;
+    pthread_mutex_t space_avail_mutex;
+    pthread_cond_t space_avail_cond;
+    bool ready{};
+    int32_t *p_tx_status{};
 
     uint8_t  num_tx_channels{};
     skiq_tx_hdl_t tx_hdl{};
     uint64_t tx_center_frequency{};
-    uint32_t tx_sample_rate{}, tx_bandwidth{};
+    uint32_t tx_sample_rate{}; 
+    uint32_t tx_bandwidth{};
     uint32_t tx_underruns{};
+    uint32_t complete_count{};
+
 
     //  setting
     bool iq_swap{};
@@ -246,17 +251,28 @@ class SoapySidekiq : public SoapySDR::Device
     // Static function used as a callback
     static void static_tx_complete_callback(int32_t status, skiq_tx_block_t *p_data, void *p_user) 
     {
-    // Cast the user data back to the SoapySidekiq instance
-    SoapySidekiq *self = static_cast<SoapySidekiq*>(p_user);
-    // Call the member function
-    self->tx_complete(status, p_data, p_user);
+        // Cast the user data back to the SoapySidekiq instance
+       passedStruct  *instance = static_cast<passedStruct*>(p_user);
+        SoapySidekiq *self = instance->classAddr;
+        uint32_t txIndex = instance->txIndex;
+
+        // Call the member function
+        self->tx_complete(status, p_data, txIndex);
     }
+
   public:
+    struct passedStruct
+    {
+        SoapySidekiq *classAddr;
+        uint32_t txIndex;
+    };
+
+    passedStruct *passedStructInstance;
+
     //  receive thread
-    uint32_t complete_count{};
     std::thread _rx_receive_thread;
     void rx_receive_operation(void);
-    void tx_complete(int32_t status, skiq_tx_block_t *p_data, void *p_user);
-
     static std::vector<SoapySDR::Kwargs> sidekiq_devices;
+
+    void tx_complete(int32_t status, skiq_tx_block_t *p_data, uint32_t txIndex);
 };

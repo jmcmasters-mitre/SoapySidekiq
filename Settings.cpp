@@ -19,34 +19,30 @@
       @param p_user reference to the user data
       @return void
  */
-void SoapySidekiq::tx_complete( int32_t status, skiq_tx_block_t *p_data, void *p_user )
+void SoapySidekiq::tx_complete( int32_t status, skiq_tx_block_t *p_data, uint32_t txIndex )
 {
     if(status != 0)
     {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "packet %" PRIu32 " failed with status %d\n",
-                this->complete_count, status);
+        SoapySDR_logf(SOAPY_SDR_ERROR, "packet failed with status %d\n", status);
     }
 
-    // increment the packet completed count
     this->complete_count++;
 
-    tx_buf_mutex.lock();
-
     // update the in use status of the packet just completed
-    if (p_user)
-    {
-        *(int32_t*)p_user = 0;
-    }
+    tx_buf_mutex.lock();
+    p_tx_status[txIndex] = 0;
     tx_buf_mutex.unlock();
     
 
     // signal to the other thread that there may be space available now that a
     // packet send has completed
-    std::unique_lock<std::mutex> lock(space_avail_mutex);
-
-    // Signal the condition variable
-    ready = true;
-    space_avail_cond.notify_one();
+    {
+        // Signal the condition variable
+        pthread_mutex_lock(&space_avail_mutex);
+        ready = true;
+        pthread_cond_signal(&space_avail_cond);
+        pthread_mutex_unlock(&space_avail_mutex);
+    }
 }
 
 
@@ -70,6 +66,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     int status = 0;
     uint8_t channels = 0;
     skiq_iq_order_t iq_order;
+    int i;
 
     /* We need to set some default parameters in case the user does not */
 
@@ -99,6 +96,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     rx_payload_size_in_bytes = 0;
     rf_time_source = true;
     timetype = "rf_timestamp";
+    complete_count = 0;
 
     //  this may change later according to format
     rx_running = false;
@@ -212,30 +210,51 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     SoapySDR_logf(SOAPY_SDR_INFO, "card: %d, card resolution: %d bits, max ADC value: %d", 
                   card, this->resolution, (uint64_t) this->max_value); 
 
-     // register the callback
-     //status = skiq_register_tx_complete_callback( card, &SoapySidekiq::tx_complete );
-     status = skiq_register_tx_complete_callback(card, 
-             &SoapySidekiq::static_tx_complete_callback);
-//             static_cast<void (*)(int32_t, skiq_tx_block_t*, void*)>(&SoapySidekiq::tx_complete));
- 
-     if( status != 0 )
-     {
-         SoapySDR_logf(SOAPY_SDR_ERROR, "unable to register transmit completion callback"
-                 " status: %" PRIi32, status);
+    // allocate for # blocks
+    p_tx_status = static_cast<int32_t*>(calloc(DEFAULT_NUM_BUFFERS, sizeof(*p_tx_status)));
+    if( p_tx_status == NULL )
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "failed to allocate memory for TX status");
         throw std::runtime_error("");
-     }
+    }
+
+    for (i = 0; i < DEFAULT_NUM_BUFFERS; i++)
+    {
+        p_tx_status[i] = 0;
+    }
+
+    // register the callback
+    status = skiq_register_tx_complete_callback(card, 
+                                        &SoapySidekiq::static_tx_complete_callback);
+    if( status != 0 )
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_register_tx_complete_callback failed, "
+                " status: %" PRIi32, status);
+        throw std::runtime_error("");
+    }
+
+    pthread_mutex_init(&space_avail_mutex, nullptr);
+    pthread_cond_init(&space_avail_cond, nullptr);
+
 
 }
 
+// Destructor
 SoapySidekiq::~SoapySidekiq(void)
 {
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "In destructor", card);
+
+    if (NULL != p_tx_status)
+    {
+        free(p_tx_status);
+        p_tx_status = NULL;
+    }
+
     if (skiq_exit() != 0)
     {
         SoapySDR_logf(SOAPY_SDR_ERROR, "Failure: skiq_exit", card);
     }
-    SoapySDR_logf(SOAPY_SDR_INFO, "leaving destructor", card);
 }
 
 /*******************************************************************

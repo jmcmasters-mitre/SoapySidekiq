@@ -14,6 +14,7 @@
 // could not understand why
 bool   start_signal = false;
 
+
 std::vector<std::string> SoapySidekiq::getStreamFormats(
     const int direction, const size_t channel) const
 {
@@ -492,9 +493,9 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
             throw std::runtime_error("skiq_write_tx_data_flow_mode error");
         }
 
-        // transfer mode (sync for now)
+        // running in aync mode
         status = skiq_write_tx_transfer_mode(card, tx_hdl,
-                                             skiq_tx_transfer_mode_sync);
+                                             skiq_tx_transfer_mode_async);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
@@ -685,7 +686,6 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
                               int &flags, const long long timeNs,
                               const long timeoutUs)
 {
-
     int      status = 0;
     uint32_t errors = 0;
 
@@ -703,114 +703,111 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
 
     // Pointer to the location in the input buffer to transmit from
     char *inbuff_ptr = (char *)(buffs[0]);
-#ifdef debug2
-    int16_t *tmp_ptr = (int16_t *)inbuff_ptr;
 
-    uint32_t tmp_ctr = 0;
+    uint32_t num_blocks = numElems / DEFAULT_TX_BUFFER_LENGTH;
 
-    for (int i = 0; i < 5; i++)
-    {
-        printf(" 0x%04X 0x%04X ", (uint16_t)tmp_ptr[tmp_ctr],
-               (uint16_t)tmp_ptr[tmp_ctr + 1]);
-        tmp_ctr += 2;
-        fflush(stdout);
-    }
-    printf("\n");
-#endif
-
-    // Pointer to the location in the output buffer to copy to.
-    char *outbuff_ptr =
-        (char *)p_tx_block[currTXBuffIndex]->data + p_tx_block_index;
-
-    // How many bytes are left in the block we are working on.
-    uint32_t block_bytes_left =
-        (DEFAULT_TX_BUFFER_LENGTH * 4) - p_tx_block_index;
+    uint32_t curr_block = 0;
 
     // total number of bytes that need to be transmitted in this call
-    uint32_t data_bytes = numElems * 4;
+    uint32_t tx_block_bytes = DEFAULT_TX_BUFFER_LENGTH * 4;
 
-    /* loop until the number of elements to send is less than the size left in
-     * the block */
-    while (data_bytes >= block_bytes_left)
+    while (curr_block < num_blocks)
     {
-#ifdef debug
-        SoapySDR_logf(SOAPY_SDR_DEBUG,
-                      "1 numElems %u, data_bytes %d, block_bytes_left %d, "
-                      "p_tx_block_index %u\n",
-                      numElems, data_bytes, block_bytes_left, p_tx_block_index);
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "inbuff_ptr %p, outbuff_ptr %p\n",
-                      inbuff_ptr, outbuff_ptr);
-#endif
+        // Pointer to the location in the output buffer to copy to.
+        char *outbuff_ptr =
+                    (char *)p_tx_block[currTXBuffIndex]->data;
 
         // determine if we received short or float
         if (txUseShort == true)
-        { // CS16
-            memcpy(outbuff_ptr, inbuff_ptr, block_bytes_left);
-            inbuff_ptr += block_bytes_left;
+        { 
+            // CS16
+            memcpy(outbuff_ptr, inbuff_ptr, tx_block_bytes);
         }
         else
         { // float
             float *  float_inbuff = (float *)inbuff_ptr;
-            uint32_t words_left = block_bytes_left / 4;
+            uint32_t words_left = DEFAULT_TX_BUFFER_LENGTH;
             uint16_t * new_outbuff = (uint16_t *)outbuff_ptr;
 
             int short_ctr = 0;
             for (uint32_t i = 0; i < words_left; i++)
             {
-                new_outbuff[short_ctr + 1] = (uint16_t)(float_inbuff[short_ctr + 1] * this->max_value);
-                new_outbuff[short_ctr ] = (uint16_t)(float_inbuff[short_ctr] * this->max_value);
-#ifdef debug3
-                if (i < 1)
-                {
+                new_outbuff[short_ctr + 1] = (uint16_t)(float_inbuff[short_ctr + 1] * 
+                                              this->max_value);
 
-                    printf("1 I write float %f, short %d, calc_int %f\n",
-                           float_inbuff[short_ctr], new_outbuff[short_ctr],
-                           (*(dbuff_ptr - 2) * this->max_value));
-                    printf("1 Q write %d, real %f, calc_int %f\n\n",
-                           float_inbuff[short_ctr + 1], *(dbuff_ptr - 1),
-                           (*(dbuff_ptr - 1) * this->max_value));
-                }
-#endif
+                new_outbuff[short_ctr] = (uint16_t)(float_inbuff[short_ctr] * 
+                                          this->max_value);
                 short_ctr += 2;
             }
-
         }
 
 
-
-        status = skiq_transmit(card, tx_hdl, p_tx_block[currTXBuffIndex], NULL);
-        if (status != 0)
+        // need to make sure that we don't update the timestamp of a packet
+        // that is already in use
+        tx_buf_mutex.lock();
+        if( p_tx_status[currTXBuffIndex] == 0 )
         {
-            SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_transmit (card %d) status %d", card,
-                          status);
+            p_tx_status[currTXBuffIndex] = 1;
+        }
+        else
+        {
+            tx_buf_mutex.unlock();
+            pthread_mutex_lock(&space_avail_mutex);
+            // wait for a packet to complete
+            ready = false;
+            pthread_cond_wait(&space_avail_cond, &space_avail_mutex);
+            pthread_mutex_unlock(&space_avail_mutex);
+
+            // space available so try again
+            continue;
+        }
+        tx_buf_mutex.unlock();
+
+//        skiq_tx_set_block_timestamp(p_tx_blocks[curr_block], timestamp);
+
+        passedStructInstance = new passedStruct;
+        passedStructInstance->classAddr = this;
+        passedStructInstance->txIndex = currTXBuffIndex;
+
+        // transmit the buffer
+        status = skiq_transmit(this->card, 
+                               this->tx_hdl, 
+                               this->p_tx_block[currTXBuffIndex], 
+                               passedStructInstance);
+        if(status == SKIQ_TX_ASYNC_SEND_QUEUE_FULL)
+        {
+            // update the in use status since we didn't actually send it yet
+            tx_buf_mutex.lock();
+            p_tx_status[currTXBuffIndex] = 0;
+            tx_buf_mutex.unlock();
+
+            {
+                // if there's no space left to send, wait until there should be space available
+                pthread_mutex_lock(&space_avail_mutex);
+                // wait for a packet to complete
+                while (!ready)
+                {
+                    pthread_cond_wait(&space_avail_cond, &space_avail_mutex);
+                }
+                ready = false;
+                pthread_mutex_unlock(&space_avail_mutex);
+            }
+        }
+        else if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR, "Failure: skiq_transmit (card %d) status %d", 
+                          card, status);
         }
 
-        data_bytes -= block_bytes_left;
-        block_bytes_left = DEFAULT_TX_BUFFER_LENGTH * 4;
+        curr_block++;
 
-        p_tx_block_index = 0;
+        // move the index into the transmit block array
         currTXBuffIndex  = (currTXBuffIndex + 1) % DEFAULT_NUM_BUFFERS;
-        outbuff_ptr      = (char *)p_tx_block[currTXBuffIndex]->data;
-    }
 
-    // This means that the number of bytes left to send is smaller than what is
-    // left in the block So just copy the data into the block and be done.  The
-    // rest will be sent on the next call
-    if (data_bytes < block_bytes_left && data_bytes != 0)
-    {
-#ifdef debug
-        SoapySDR_logf(
-            SOAPY_SDR_DEBUG,
-            "2 data_bytes %d, block_bytes_left %d, p_tx_block_index %u\n",
-            data_bytes, block_bytes_left, p_tx_block_index);
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "inbuff_ptr %p, outbuff_ptr %p\n",
-                      inbuff_ptr, outbuff_ptr);
-#endif
+        // move the pointer to the next block in the received buffer
+        inbuff_ptr += (DEFAULT_TX_BUFFER_LENGTH * 4) ;
+    } 
 
-        memcpy(outbuff_ptr, inbuff_ptr, block_bytes_left);
-        p_tx_block_index += data_bytes;
-    }
 
     /* This call will return a cumulative number of underruns since start
      * streaming */
