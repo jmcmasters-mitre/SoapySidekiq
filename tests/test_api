@@ -291,26 +291,27 @@ def do_time(sdr, handle):
 
     print("getHardwareTime")
     source = sdr.getHardwareTime("rx_rf_timestamp")
-    print(f"\trx_rf ts: {source}") 
+    print(f"\trx_rf ts: {source:,}") 
 
     source = sdr.getHardwareTime("tx_rf_timestamp")
-    print(f"\ttx_rf ts: {source}") 
+    print(f"\ttx_rf ts: {source:,}") 
 
     source = sdr.getHardwareTime("sys_timestamp")
-    print(f"\tsys ts: {source}") 
+    print(f"\tsys ts: {source:,}") 
 
     sdr.setHardwareTime(0, "now")
     print("getHardwareTime")
     source = sdr.getHardwareTime("rx_rf_timestamp")
-    print(f"\trx_rf ts: {source}") 
+    print(f"\trx_rf ts: {source:,}") 
 
     source = sdr.getHardwareTime("tx_rf_timestamp")
-    print(f"\ttx_rf ts: {source}") 
+    print(f"\ttx_rf ts: {source:,}") 
 
     source = sdr.getHardwareTime("sys_timestamp")
-    print(f"\tsys ts: {source}") 
+    print(f"\tsys ts: {source:,}") 
 
-    sdr.setHardwareTime(0, "1pps")
+    sdr.setHardwareTime(1000000000, "now")
+    sdr.setHardwareTime(1000000000, "1pps")
 
 
 

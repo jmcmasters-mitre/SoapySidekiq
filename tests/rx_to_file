@@ -69,13 +69,17 @@ def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
     else:
         SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Receive is complete, received {rc.ret:,} samples")
 
+    sdr.deactivateStream(rx_stream)
+    sdr.closeStream(rx_stream)
+
     SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, 
             f"Writing {(buff_len * 4):,} bytes to filename: {file_name}")
 
+    first_10_bytes = rx_buff.tobytes()[:10]
+    print('First 10 bytes in hex:', ' '.join(f'{b:02x}' for b in first_10_bytes))
+
     rx_buff.tofile(f"{file_name}")
 
-    sdr.deactivateStream(rx_stream)
-    sdr.closeStream(rx_stream)
 
 
 def parse_command_line_arguments():
@@ -98,7 +102,7 @@ def parse_command_line_arguments():
                         default=1000e6, help='LO Frequency')
     parser.add_argument('-g', type=int, required=False, dest='gain',
                         default=None, help='RX gain, otherwise automatic')
-    parser.add_argument('-s', type=int, required=False, dest='num_blocks',
+    parser.add_argument('--num-blocks', type=int, required=False, dest='num_blocks',
                         default=DEFAULT_NUM_BLOCKS, help='Number of blocks to collect')
     parser.add_argument('-d', type=str, required=False, dest='dest',
                         default='samples.bin', help='File name where samples are written')

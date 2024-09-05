@@ -38,7 +38,7 @@ std::string SoapySidekiq::getNativeStreamFormat(const int    direction,
 {
     SoapySDR_logf(SOAPY_SDR_TRACE, "getNativeStreamFormat");
 
-    fullScale = this->max_value;
+    fullScale = this->maxValue;
 
     return "CS16";
 }
@@ -111,15 +111,15 @@ void SoapySidekiq::rx_receive_operation(void)
     while (rx_running)
     {
         //  check for overflow
-        if (rxReadIndex == ((rxWriteIndex + 1) % DEFAULT_NUM_BUFFERS) ||
-            overload)
+        if (rxReadIndex == ((rxWriteIndex + 1) % DEFAULT_NUM_BUFFERS))
         {
-            SoapySDR_log(SOAPY_SDR_WARNING,
-                         "Detected overflow Event in RX Sidekiq Thread");
-            SoapySDR_logf(SOAPY_SDR_DEBUG,
-                          "rxReadIndex %d, rxWriteIndex %d, overload %d\n",
+            SoapySDR_log(SOAPY_SDR_ERROR,
+                         "Detected overflow event in RX worker thread");
+
+            SoapySDR_logf(SOAPY_SDR_DEBUG, "rxReadIndex %d, rxWriteIndex %d",
                           rxReadIndex, rxWriteIndex, overload);
-            rxWriteIndex     = rxReadIndex;
+
+            throw std::runtime_error("");
         }
         else
         {
@@ -149,10 +149,11 @@ void SoapySidekiq::rx_receive_operation(void)
                     {
                         if(expected_timestamp != tmp_p_rx_block->rf_timestamp)
                         {
-                            SoapySDR_log(SOAPY_SDR_WARNING,
+                            SoapySDR_log(SOAPY_SDR_ERROR,
                                         "Detected timestamp overflow in RX Sidekiq Thread");
                             SoapySDR_logf(SOAPY_SDR_DEBUG, "expected timestamp %lu, actual %lu",
                                             expected_timestamp, tmp_p_rx_block->rf_timestamp);
+                            throw std::runtime_error("");
 
                             // restart the timestamp checking
                             first = true;
@@ -534,13 +535,27 @@ int SoapySidekiq::deactivateStream(SoapySDR::Stream *stream, const int flags,
         rx_running = false;
 
         /* stop rx streaming */
-        status = skiq_stop_rx_streaming(card, rx_hdl);
-        if (status != 0)
+        if (flags == SOAPY_SDR_HAS_TIME)
         {
-            SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_stop_rx_streaming (card %d) handle "
-                          "%d, status %d",
-                          card, rx_hdl, status);
+            status = skiq_stop_rx_streaming_on_1pps(card, rx_hdl, 0);
+            if (status != 0)
+            {
+                SoapySDR_logf(SOAPY_SDR_ERROR,
+                        "Failure: skiq_stop_rx_streaming_on_1pps (card %d) handle "
+                        "%d, status %d",
+                        card, rx_hdl, status);
+            }
+        }
+        else
+        {
+            status = skiq_stop_rx_streaming(card, rx_hdl);
+            if (status != 0)
+            {
+                SoapySDR_logf(SOAPY_SDR_ERROR,
+                        "Failure: skiq_stop_rx_streaming (card %d) handle "
+                        "%d, status %d",
+                        card, rx_hdl, status);
+            }
         }
 
         /* wait till the rx thread is done */
@@ -551,14 +566,29 @@ int SoapySidekiq::deactivateStream(SoapySDR::Stream *stream, const int flags,
     }
     else if (stream == TX_STREAM)
     {
-        /* stop tx streaming */
-        status = skiq_stop_tx_streaming(card, tx_hdl);
-        if (status != 0)
+        if (flags == SOAPY_SDR_HAS_TIME)
         {
-            SoapySDR_logf(
-                SOAPY_SDR_ERROR,
-                "Failure: skiq_stop_tx_streaming (card %d), status %d", card,
-                status);
+            /* stop tx streaming */
+            status = skiq_stop_tx_streaming_on_1pps(card, tx_hdl, 0);
+            if (status != 0)
+            {
+                SoapySDR_logf(
+                        SOAPY_SDR_ERROR,
+                        "Failure: skiq_stop_tx_streaming_on_1pps (card %d), status %d", card,
+                        status);
+            }
+        }
+        else
+        {
+            /* stop tx streaming */
+            status = skiq_stop_tx_streaming(card, tx_hdl);
+            if (status != 0)
+            {
+                SoapySDR_logf(
+                        SOAPY_SDR_ERROR,
+                        "Failure: skiq_stop_tx_streaming (card %d), status %d", card,
+                        status);
+            }
         }
     }
 
@@ -569,7 +599,6 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
                              const size_t numElems, int &flags,
                              long long &timeNs, const long timeoutUs)
 {
-    long waitTime = timeoutUs;
 
     if (stream != RX_STREAM)
     {
@@ -582,6 +611,8 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
                      " numElems %d, block size %u", numElems, rx_payload_size_in_words);
         throw std::runtime_error("");
     }
+
+    long waitTime = timeoutUs;
 
     // if the user didn't give a waittime then wait a LONG time
     if (waitTime == 0)
@@ -607,7 +638,7 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     skiq_rx_block_t *block_ptr = p_rx_block[rxReadIndex];
     char *ringbuffer_ptr = (char *)((char *)block_ptr->data);
     
-    if (this->rf_time_source == true)
+    if (this->rfTimeSource == true)
     {
         timeNs = block_ptr->rf_timestamp;
     }
@@ -642,14 +673,25 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
 
             for (uint32_t i = 0; i < rx_payload_size_in_bytes; i++)
             {
-                *dbuff_ptr++ = (float)source[short_ctr + 1] / this->max_value;
-                *dbuff_ptr++ = (float)source[short_ctr] / this->max_value;
+                *dbuff_ptr++ = (float)source[short_ctr + 1] / this->maxValue;
+                *dbuff_ptr++ = (float)source[short_ctr] / this->maxValue;
                 short_ctr += 2;
             }
         }
     
         // a block is done, so move counter.
         block_num++;
+
+        // if the user is asking for a huge numElems then we timeout. 
+        // so reset this waittime if we successfully got a block
+        waitTime = timeoutUs;
+
+        // if the user didn't give a waittime then wait a LONG time
+        if (waitTime == 0)
+        {
+            waitTime = SLEEP_1SEC;
+        }
+
 
         // if we need more blocks get the next one
         if (block_num < num_blocks)
@@ -687,7 +729,6 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
                               const long timeoutUs)
 {
     int      status = 0;
-    uint32_t errors = 0;
 
     if (stream != TX_STREAM)
     {
@@ -733,10 +774,10 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             for (uint32_t i = 0; i < words_left; i++)
             {
                 new_outbuff[short_ctr + 1] = (uint16_t)(float_inbuff[short_ctr + 1] * 
-                                              this->max_value);
+                                              this->maxValue);
 
                 new_outbuff[short_ctr] = (uint16_t)(float_inbuff[short_ctr] * 
-                                          this->max_value);
+                                          this->maxValue);
                 short_ctr += 2;
             }
         }
@@ -763,8 +804,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
         }
         tx_buf_mutex.unlock();
 
-//        skiq_tx_set_block_timestamp(p_tx_blocks[curr_block], timestamp);
-
+        // Create the structure that is passed in p_user
         passedStructInstance = new passedStruct;
         passedStructInstance->classAddr = this;
         passedStructInstance->txIndex = currTXBuffIndex;
@@ -781,17 +821,15 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             p_tx_status[currTXBuffIndex] = 0;
             tx_buf_mutex.unlock();
 
+            // if there's no space left to send, wait until there should be space available
+            pthread_mutex_lock(&space_avail_mutex);
+            // wait for a packet to complete
+            while (!ready)
             {
-                // if there's no space left to send, wait until there should be space available
-                pthread_mutex_lock(&space_avail_mutex);
-                // wait for a packet to complete
-                while (!ready)
-                {
-                    pthread_cond_wait(&space_avail_cond, &space_avail_mutex);
-                }
-                ready = false;
-                pthread_mutex_unlock(&space_avail_mutex);
+                pthread_cond_wait(&space_avail_cond, &space_avail_mutex);
             }
+            ready = false;
+            pthread_mutex_unlock(&space_avail_mutex);
         }
         else if (status != 0)
         {
@@ -802,29 +840,40 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
         curr_block++;
 
         // move the index into the transmit block array
-        currTXBuffIndex  = (currTXBuffIndex + 1) % DEFAULT_NUM_BUFFERS;
+        currTXBuffIndex = (currTXBuffIndex + 1) % DEFAULT_NUM_BUFFERS;
 
         // move the pointer to the next block in the received buffer
         inbuff_ptr += (DEFAULT_TX_BUFFER_LENGTH * 4) ;
-    } 
-
-
-    /* This call will return a cumulative number of underruns since start
-     * streaming */
-    status = skiq_read_tx_num_underruns(card, tx_hdl, &errors);
-    if (status != 0)
-    {
-        SoapySDR_logf(SOAPY_SDR_ERROR,
-                      "Failure: skiq_read_tx_num_underruns (card %d) status %d",
-                      card, status);
-    }
-
-    if (errors >= tx_underruns + 500)
-    {
-        printf("cumulative underruns %d\n", errors);
-        tx_underruns = errors;
     }
 
     return numElems;
 }
+
+int SoapySidekiq::readStreamStatus(SoapySDR::Stream *stream,
+                                  size_t &chanMask,
+                                  int &flags,
+                                  long long &timeNs,
+                                  const long timeoutUs)
+{
+    int status = 0;
+    uint32_t errors = 0;
+
+    if (stream != TX_STREAM)
+    {
+        return SOAPY_SDR_NOT_SUPPORTED;
+    }
+
+    /* This call will return a cumulative number of underruns since start
+     * streaming */
+    status = skiq_read_tx_num_underruns(this->card, this->tx_hdl, &errors);
+    if (status != 0)
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR,
+                      "Failure: skiq_read_tx_num_underruns (card %d) status %d",
+                      this->card, status);
+    }
+
+    return errors;
+}
+
 

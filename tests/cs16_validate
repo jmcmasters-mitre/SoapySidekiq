@@ -34,14 +34,14 @@ def get_blocks(buff, rx_stream, N, flag, rate, sys_freq):
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
 
+        actual = sr.timeNs
+        delta = actual - expected_timestamp
+        ratio = sys_freq / rate
+        adder = ratio * N
         
         if first:
             first = False
         else:
-            actual = sr.timeNs
-            delta = actual - expected_timestamp
-            ratio = sys_freq / rate
-            adder = ratio * N
 
             if flag == "rf":
                 if expected_timestamp != actual:
@@ -141,7 +141,7 @@ def main(cardno, rx_handle, rate, bw, freq):
 
     setting = sdr.readSetting("sys_clock_freq")
     ref_rate = int(setting)
-    print(f"sys rate is {ref_rate}")
+    print(f"sys rate is {ref_rate:,}")
 
     # reset the timestamps
     sdr.setHardwareTime(0, "now")

@@ -94,7 +94,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     rx_block_size_in_bytes = 0;
     rx_payload_size_in_words = 1018;
     rx_payload_size_in_bytes = 0;
-    rf_time_source = true;
+    rfTimeSource = true;
     timetype = "rf_timestamp";
     complete_count = 0;
 
@@ -205,10 +205,10 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     }
 
     this->resolution = tmp_resolution;
-    this->max_value = (double) ((1 << (tmp_resolution-1))-1);
+    this->maxValue = (double) ((1 << (tmp_resolution-1))-1);
 
     SoapySDR_logf(SOAPY_SDR_INFO, "card: %d, card resolution: %d bits, max ADC value: %d", 
-                  card, this->resolution, (uint64_t) this->max_value); 
+                  card, this->resolution, (uint64_t) this->maxValue); 
 
     // allocate for # blocks
     p_tx_status = static_cast<int32_t*>(calloc(DEFAULT_NUM_BUFFERS, sizeof(*p_tx_status)));
@@ -221,6 +221,15 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     for (i = 0; i < DEFAULT_NUM_BUFFERS; i++)
     {
         p_tx_status[i] = 0;
+    }
+
+    status = skiq_read_sys_timestamp_freq(this->card, &this->sys_freq);
+    if (status != 0)
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR,
+                "skiq_read_sys_timestamp_freq failed: (card %d), status %d", 
+                card, status);
+        throw std::runtime_error("");
     }
 
     // register the callback
@@ -1492,12 +1501,12 @@ void SoapySidekiq::writeSetting(const std::string &key,
         if (value == "rf_timestamp")
         { 
             timetype = "rf_timestamp";
-            rf_time_source = true;
+            rfTimeSource = true;
         }
         else if (value == "sys_timestamp")
         {
             timetype = "sys_timestamp";
-            rf_time_source = false;
+            rfTimeSource = false;
         }
         else 
         {
@@ -1518,7 +1527,7 @@ std::string SoapySidekiq::readSetting(const std::string &key) const
 
     if (key == "max_rx_value")
     {
-        return std::to_string((int)this->max_value);
+        return std::to_string((int)this->maxValue);
     }
     else if (key == "iq_swap")
     {
@@ -1538,19 +1547,7 @@ std::string SoapySidekiq::readSetting(const std::string &key) const
     }
     else if (key == "sys_clock_freq")
     {
-        int status = 0;
-        uint64_t sys_freq = 0;
-
-        status = skiq_read_sys_timestamp_freq(this->card, &sys_freq);
-        if (status != 0)
-        {
-            SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "skiq_read_sys_timestamp_freq failed: (card %d), status %d", 
-                          card, status);
-            throw std::runtime_error("");
-        }
-
-        return std::to_string((uint64_t)sys_freq);
+        return std::to_string((uint64_t)this->sys_freq);
     }
     else
     {
@@ -1674,6 +1671,7 @@ bool SoapySidekiq::hasHardwareTime(const std::string &what="") const
     return false;
 }
 
+/* Return the specific timestamp in nanoseconds */
 long long SoapySidekiq::getHardwareTime(const std::string &what="") const
 {
     int status = 0;
@@ -1691,7 +1689,18 @@ long long SoapySidekiq::getHardwareTime(const std::string &what="") const
                            card, status);
             throw std::runtime_error("");
         }
-        return timestamp;
+
+        // if the user has not set the sample rate then we 
+        // must warn them and return
+        if (rx_sample_rate == 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_WARNING, "Cannot convert an rf timestamp to time without"
+                          "configuring the sample rate first.  Passing unconverted timestamp");
+
+            return timestamp;
+        }
+
+        return (timestamp / rx_sample_rate) * NANOS_IN_SEC;
     }
     else if (equalsIgnoreCase(what, "tx_rf_timestamp"))
     {
@@ -1703,7 +1712,18 @@ long long SoapySidekiq::getHardwareTime(const std::string &what="") const
                           card, status);
             throw std::runtime_error("");
         }
-        return timestamp;
+
+        // if the user has not set the sample rate then we 
+        // must warn them and return
+        if (tx_sample_rate == 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_WARNING, "Cannot convert an rf timestamp to time without"
+                          "configuring the sample rate first.  Passing unconverted timestamp");
+
+            return timestamp;
+        }
+
+        return (timestamp / tx_sample_rate) * NANOS_IN_SEC;
     }
     else if (equalsIgnoreCase(what, "sys_timestamp"))
     {
@@ -1715,7 +1735,8 @@ long long SoapySidekiq::getHardwareTime(const std::string &what="") const
                           card, status);
             throw std::runtime_error("");
         }
-        return timestamp;
+
+        return (timestamp / this->sys_freq) * NANOS_IN_SEC;
     }
     else
     {
@@ -1728,35 +1749,41 @@ long long SoapySidekiq::getHardwareTime(const std::string &what="") const
 void SoapySidekiq::setHardwareTime(const long long timeNs, const std::string &what="")
 {
     int status = 0;
+    uint64_t new_timestamp = 0;
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "setHardwareTime");
 
+    // convert timeNs to sys timestamp frequency
+    new_timestamp = (timeNs * this->sys_freq) / NANOS_IN_SEC;
+
     if (equalsIgnoreCase(what, "now"))
     {
-        status = skiq_reset_timestamps(card);
+
+        status = skiq_update_timestamps(card, new_timestamp);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "skiq_reset_timestamps failed, (card %u), status %d", 
+                          "skiq_update_timestamps failed, (card %u), status %d", 
                           card, status);
             throw std::runtime_error("");
         }
 
-        SoapySDR_logf(SOAPY_SDR_INFO, "card %d, reset timestamps", card);
+        SoapySDR_logf(SOAPY_SDR_INFO, "card %d, updated timestamps to %lu", card, new_timestamp);
 
         return;
     }
     else if (equalsIgnoreCase(what, "1pps"))
     {
-        status = skiq_write_timestamp_reset_on_1pps(card, 0);
+        status = skiq_write_timestamp_update_on_1pps(card, 0, new_timestamp);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "skiq_write_timestamp_reset_on_1pps failed, (card %u), status %d", 
+                          "skiq_update_timestamp_on_1pps failed, (card %u), status %d", 
                           card, status);
             throw std::runtime_error("");
         }
-        SoapySDR_logf(SOAPY_SDR_INFO, "card %d, will reset timestamps on 1pps", card);
+        SoapySDR_logf(SOAPY_SDR_INFO, "card %d, updated timestamps to %lu on the next 1pps", 
+                      card, new_timestamp);
 
         return;
     }
@@ -1874,17 +1901,8 @@ double SoapySidekiq::getReferenceClockRate(void) const
     }
     else if (equalsIgnoreCase(source, "internal_clock"))
     {
-        uint64_t sys_freq = 0;
-        status = skiq_read_sys_timestamp_freq(this->card, &sys_freq);
-        if (status != 0)
-        {
-            SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "skiq_read_sys_timestamp_freq failed: (card %d), status %d", 
-                          card, status);
-            throw std::runtime_error("");
-        }
 
-        return sys_freq;
+        return this->param.rf_param.ref_clock_freq;
     }
     else
     {
