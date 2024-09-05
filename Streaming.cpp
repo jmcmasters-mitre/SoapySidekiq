@@ -149,11 +149,10 @@ void SoapySidekiq::rx_receive_operation(void)
                     {
                         if(expected_timestamp != tmp_p_rx_block->rf_timestamp)
                         {
-                            SoapySDR_log(SOAPY_SDR_ERROR,
+                            SoapySDR_log(SOAPY_SDR_WARNING,
                                         "Detected timestamp overflow in RX Sidekiq Thread");
                             SoapySDR_logf(SOAPY_SDR_DEBUG, "expected timestamp %lu, actual %lu",
                                             expected_timestamp, tmp_p_rx_block->rf_timestamp);
-                            throw std::runtime_error("");
 
                             // restart the timestamp checking
                             first = true;
@@ -681,17 +680,6 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     
         // a block is done, so move counter.
         block_num++;
-
-        // if the user is asking for a huge numElems then we timeout. 
-        // so reset this waittime if we successfully got a block
-        waitTime = timeoutUs;
-
-        // if the user didn't give a waittime then wait a LONG time
-        if (waitTime == 0)
-        {
-            waitTime = SLEEP_1SEC;
-        }
-
 
         // if we need more blocks get the next one
         if (block_num < num_blocks)
