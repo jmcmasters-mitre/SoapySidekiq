@@ -389,7 +389,7 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         /* set rx source as iq data */
         if (iq_swap == true)
         {
-            status = skiq_write_iq_order_mode(card, skiq_iq_order_qi);
+            status = skiq_write_iq_order_mode(card, skiq_iq_order_iq);
             if (status != 0)
             {
                 SoapySDR_logf(SOAPY_SDR_ERROR,
@@ -465,7 +465,20 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
     }
     else if (stream == TX_STREAM)
     {
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "Start TX, hdl: %d", tx_hdl);
+        /* set as iq data */
+        if (iq_swap == true)
+        {
+            status = skiq_write_iq_order_mode(card, skiq_iq_order_iq);
+            if (status != 0)
+            {
+                SoapySDR_logf(SOAPY_SDR_ERROR,
+                             "skiq_write_rx_data_src failed (card %u) status %d",
+                              card, status);
+                throw std::runtime_error("");
+            }
+            SoapySDR_logf(SOAPY_SDR_INFO, "TX is set to I then Q order"); 
+        }
+
         p_tx_block_index = 0;
         tx_underruns     = 0;
 

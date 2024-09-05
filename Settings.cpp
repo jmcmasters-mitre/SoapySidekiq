@@ -21,11 +21,6 @@
  */
 void SoapySidekiq::tx_complete( int32_t status, skiq_tx_block_t *p_data, uint32_t txIndex )
 {
-    if(status != 0)
-    {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "packet failed with status %d\n", status);
-    }
-
     this->complete_count++;
 
     // update the in use status of the packet just completed
