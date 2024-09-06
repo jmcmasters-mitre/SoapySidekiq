@@ -12,7 +12,7 @@ from SoapySDR import *
 
 NUM_MTU = 8
 
-def make_tone(n, make_float, fcen, fs, phi=0.285):
+def make_tone(n, make_float, fcen, fs, max_value, phi=0.285):
     """
     Generates tone signal window with a frequency that is an integer
     multiple of the sample rate so it can be repeated without a phase
@@ -21,7 +21,6 @@ def make_tone(n, make_float, fcen, fs, phi=0.285):
     period = fs / fcen
 
     #assert n % period == 0, 'Total samples not integer number of periods'
-    a = (2**12 / 2) -1
     # Make Complex Valued Tone Signal
     wt = np.array(2 * np.pi * fcen * np.arange(n) / fs)
     sig_cplx = np.exp(1j * (wt + phi))
@@ -34,8 +33,8 @@ def make_tone(n, make_float, fcen, fs, phi=0.285):
     else:
         # Convert to interleaved int16 values
         sig_int16 = np.empty(2 * n, dtype=np.int16)
-        sig_int16[0::2] = a * sig_cplx.real
-        sig_int16[1::2] = a * sig_cplx.imag
+        sig_int16[0::2] = max_value * sig_cplx.real
+        sig_int16[1::2] = max_value * sig_cplx.imag
         return sig_int16
 
 
@@ -53,6 +52,11 @@ def main(cardno, serial, handle,
     SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
 #    SoapySDR.setLogLevel(SOAPY_SDR_ERROR)
 
+    # get the full scale value for making the tone.
+    rc = sdr.getNativeStreamFormat(SOAPY_SDR_TX, handle)
+    fullscale = int(rc.fullScale)
+    print(f"fullscale {fullscale}")
+
     if (make_float):
         tx_stream = sdr.setupStream(SOAPY_SDR_TX, SOAPY_SDR_CF32, [handle])
     else:
@@ -61,14 +65,14 @@ def main(cardno, serial, handle,
     # make the buffer the size of the MTU * The number of MTU we want in one go
     buff_len=(sdr.getStreamMTU(tx_stream) * NUM_MTU)
 
-    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Buffer length is {buff_len:,} words")
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Tone buffer length is {buff_len:,} words")
 
     if offset is None:
         offset = rate / 4
 
-    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Tone will be {int(offset):,} Hz above LO\n")
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Tone will be {int(offset):,} Hz above LO")
 
-    tx_buff = make_tone(buff_len, make_float, offset, rate)
+    tx_buff = make_tone(buff_len, make_float, offset, rate, fullscale)
 
     # Setup Radio
     sdr.setSampleRate(SOAPY_SDR_TX, handle, rate)

@@ -25,6 +25,10 @@ void SoapySidekiq::tx_complete( int32_t status, skiq_tx_block_t *p_data, uint32_
 
     // update the in use status of the packet just completed
     tx_buf_mutex.lock();
+    if (p_tx_status[txIndex] != 1)
+    {
+
+    }
     p_tx_status[txIndex] = 0;
     tx_buf_mutex.unlock();
     
@@ -106,7 +110,8 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         }
         catch (const std::invalid_argument &)
         {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "requested card (%u), not found", std::stoi(args.at("card")));
+            SoapySDR_logf(SOAPY_SDR_ERROR, "requested card (%u), not found", 
+                          std::stoi(args.at("card")));
             throw std::runtime_error("");
 
         }
@@ -139,7 +144,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     status = skiq_read_parameters(card, &this->param);
     if (status != 0)
     {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "card %u, skiq_read_parameters failed, status %d",
+        SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_read_parameters failed, card %u, status %d",
                       card, status);
         throw std::runtime_error("");
     }
@@ -233,7 +238,8 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     if( status != 0 )
     {
         SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_register_tx_complete_callback failed, "
-                " status: %" PRIi32, status);
+                      "card: %u status: %d", 
+                      card, status);
         throw std::runtime_error("");
     }
 
@@ -255,10 +261,7 @@ SoapySidekiq::~SoapySidekiq(void)
         p_tx_status = NULL;
     }
 
-    if (skiq_exit() != 0)
-    {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "Failure: skiq_exit", card);
-    }
+    skiq_exit();
 }
 
 /*******************************************************************
@@ -506,7 +509,7 @@ bool SoapySidekiq::getGainMode(const int direction, const size_t channel) const
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_read_rx_gain_mode (card %d), status %d",
+                          "skiq_read_rx_gain_mode failed, (card %u), status %d",
                           card, status);
             throw std::runtime_error("");
         }
@@ -606,9 +609,8 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
             status        = skiq_write_rx_gain(card, rx_hdl, gain_index);
             if (status != 0)
             {
-                SoapySDR_logf(
-                    SOAPY_SDR_ERROR,
-                    "Failure: skiq_write_rx_gain (card %d, value %d) status %d",
+                SoapySDR_logf(SOAPY_SDR_ERROR,
+                    "skiq_write_rx_gain failed (card %u, value %d) status %d",
                     card, gain, status);
                     throw std::runtime_error("");
             }
@@ -679,7 +681,7 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
         {
             SoapySDR_logf(
                 SOAPY_SDR_ERROR,
-                "Failure: skiq_write_tx_gain (card %d, value %d), status %d",
+                "skiq_write_tx_gain failed, (card %u, value %d), status %d",
                 card, attenuation_index, status);
         throw std::runtime_error("");
         }
@@ -706,7 +708,7 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_read_rx_gain (card %u), rx_hdl %u, status %d",
+                          "skiq_read_rx_gain failed (card %u), rx_hdl %u, status %d",
                           this->card, this->rx_hdl, status);
             throw std::runtime_error("");
         }
@@ -748,7 +750,7 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_read_tx_attenuation (card %d), status %d",
+                          "skiq_read_tx_attenuation failed (card %u), status %d",
                           card, status);
         throw std::runtime_error("");
         }
@@ -911,7 +913,7 @@ void SoapySidekiq::setFrequency(const int direction, const size_t channel,
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_write_tx_LO_freq (card %d, frequency "
+                          "skiq_write_tx_LO_freq failed, (card %u, frequency "
                           "%lu), status %d",
                           this->card, tx_center_frequency, status);
         throw std::runtime_error("");
@@ -938,7 +940,7 @@ double SoapySidekiq::getFrequency(const int direction, const size_t channel) con
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_read_rx_LO_freq (card %d), status %d",
+                          "skiq_read_rx_LO_freq (card %u), status %d",
                           card, status);
         throw std::runtime_error("");
         }
@@ -952,7 +954,7 @@ double SoapySidekiq::getFrequency(const int direction, const size_t channel) con
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_read_tx_LO_freq (card %d), status %d",
+                          "skiq_read_tx_LO_freq (card %u), status %d",
                           card, status);
         throw std::runtime_error("");
         }
@@ -984,7 +986,7 @@ SoapySDR::RangeList SoapySidekiq::getFrequencyRange(const int direction, const s
         {
             SoapySDR_logf(
                 SOAPY_SDR_ERROR,
-                "Failure: skiq_read_rx_LO_freq_range (card %d), status %d",
+                "skiq_read_rx_LO_freq_range failed,(card %u), status %d",
                 card, status);
         throw std::runtime_error("");
         }
@@ -997,7 +999,7 @@ SoapySDR::RangeList SoapySidekiq::getFrequencyRange(const int direction, const s
         {
             SoapySDR_logf(
                 SOAPY_SDR_ERROR,
-                "Failure: skiq_read_tx_LO_freq_range (card %d), status %d",
+                "skiq_read_tx_LO_freq_range failed (card %u), status %d",
                 card, status);
         throw std::runtime_error("");
         }
@@ -1080,8 +1082,8 @@ void SoapySidekiq::setSampleRate(const int direction, const size_t channel,
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "Failure: skiq_write_tx_sample_rate_and_bandwidth "
-                          "(card %d, sample_rate %d, bandwidth %d, status %d)",
+                          "skiq_write_tx_sample_rate_and_bandwidth failed, "
+                          "(card %u, sample_rate %u, bandwidth %u, status %d)",
                           this->card, tx_sample_rate, tx_bandwidth, status);
         throw std::runtime_error("");
         }
@@ -1258,7 +1260,7 @@ void SoapySidekiq::setBandwidth(const int direction, const size_t channel,
                                                          tx_bandwidth);
         if (status != 0)
         {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "Failure: skiq_write_tx_sample_rate_and_bandwidth "
+            SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_write_tx_sample_rate_and_bandwidth failed, "
                           "(card %u, sample_rate %u, bandwidth %u, status %u)",
                           this->card, this->tx_sample_rate, tx_bandwidth, status);
         throw std::runtime_error("");
@@ -1304,6 +1306,7 @@ void SoapySidekiq::setBandwidth(const int direction, const size_t channel,
 double SoapySidekiq::getBandwidth(const int    direction,
                                   const size_t channel) const
 {
+    int status = 0;
     uint32_t rate;
     double   actual_rate;
     uint32_t bandwidth;
@@ -1312,28 +1315,28 @@ double SoapySidekiq::getBandwidth(const int    direction,
     SoapySDR_log(SOAPY_SDR_TRACE, "getBandwidth");
     if (direction == SOAPY_SDR_RX)
     {
-        if (skiq_read_rx_sample_rate_and_bandwidth(card, rx_hdl, &rate,
+        status = skiq_read_rx_sample_rate_and_bandwidth(card, rx_hdl, &rate,
                                                    &actual_rate, &bandwidth,
-                                                   &actual_bandwidth) != 0)
+                                                   &actual_bandwidth);
+        if (status != 0)
         {
-            SoapySDR_logf(
-                SOAPY_SDR_ERROR,
-                "Failure: skiq_read_rx_sample_rate_and_bandwidth (card %d)",
-                card);
-        throw std::runtime_error("");
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                "skiq_read_rx_sample_rate_and_bandwidth failed (card %u), status %d",
+                card, status);
+            throw std::runtime_error("");
         }
     }
     else if (direction == SOAPY_SDR_TX)
     {
-        if (skiq_read_tx_sample_rate_and_bandwidth(card, tx_hdl, &rate,
+        status = skiq_read_tx_sample_rate_and_bandwidth(card, tx_hdl, &rate,
                                                    &actual_rate, &bandwidth,
-                                                   &actual_bandwidth) != 0)
+                                                   &actual_bandwidth);
+        if (status != 0)
         {
-            SoapySDR_logf(
-                SOAPY_SDR_ERROR,
-                "Failure: skiq_read_tx_sample_rate_and_bandwidth (card %d)",
-                card);
-        throw std::runtime_error("");
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                "skiq_read_tx_sample_rate_and_bandwidth failed (card %u), status %d",
+                card, status);
+            throw std::runtime_error("");
         }
     }
     else
@@ -1357,7 +1360,7 @@ SoapySDR::ArgInfoList SoapySidekiq::getSettingInfo(void) const
     SoapySDR::ArgInfo settingArg;
 
     settingArg.key         = "max_rx_value";
-    settingArg.value       = "";
+    settingArg.value       = "0";
     settingArg.name        = "max value";
     settingArg.description = "Maximum rx value based upon resolution of the card.";
     settingArg.type        = SoapySDR::ArgInfo::INT;
@@ -1378,7 +1381,7 @@ SoapySDR::ArgInfoList SoapySidekiq::getSettingInfo(void) const
     setArgs.push_back(settingArg);
 
     settingArg.key         = "log";
-    settingArg.value       = "false";
+    settingArg.value       = "TRACE";
     settingArg.name        = "log";
     settingArg.description = "Set the SoapySDR Log Level";
     settingArg.type        = SoapySDR::ArgInfo::STRING;
@@ -1387,7 +1390,7 @@ SoapySDR::ArgInfoList SoapySidekiq::getSettingInfo(void) const
     settingArg.key         = "timetype";
     settingArg.value       = "rf_timestamp";
     settingArg.name        = "timetype";
-    settingArg.description = "The type of timesstamp to return in readStream";
+    settingArg.description = "The type of timestamp to return in readStream";
     settingArg.type        = SoapySDR::ArgInfo::STRING;
     setArgs.push_back(settingArg);
 
@@ -1581,7 +1584,8 @@ std::string SoapySidekiq::getTimeSource(void) const
     if (status != 0)
     {
         SoapySDR_logf(SOAPY_SDR_ERROR,
-                      "skiq_read_1pps_source failed, (card %u), status %d", card, status);
+                      "skiq_read_1pps_source failed, (card %u), status %d", 
+                      card, status);
         throw std::runtime_error("");
     }
 
@@ -1648,7 +1652,7 @@ void SoapySidekiq::setTimeSource(const std::string &source)
 
 bool SoapySidekiq::hasHardwareTime(const std::string &what="") const
 {
-    SoapySDR_logf(SOAPY_SDR_TRACE, "hasHardwareTime");
+    SoapySDR_logf(SOAPY_SDR_TRACE, "hasHardwareTime, what = %s", what.c_str());
 
     if (equalsIgnoreCase(what, "rx_rf_timestamp"))
     {
@@ -1662,6 +1666,11 @@ bool SoapySidekiq::hasHardwareTime(const std::string &what="") const
     {
         return true;
     }
+    else if (what == "")
+    {
+        return true;
+    }
+
 
     return false;
 }
@@ -1888,7 +1897,7 @@ double SoapySidekiq::getReferenceClockRate(void) const
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "skiq_write_ref_clock_select failed: (card %d), status %d", 
+                          "skiq_write_ref_clock_select failed, (card %u), status %d", 
                           card, status);
             throw std::runtime_error("");
         }
