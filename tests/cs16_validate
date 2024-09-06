@@ -61,7 +61,7 @@ def get_blocks(buff, rx_stream, N, flag, rate, sys_freq):
 
 
 
-def analyze_blocks(buff, rx_stream, N, max_int):
+def analyze_blocks(buff, rx_stream, N, fullscale):
     print("analyzing blocks", flush=True)
 
     for i in range(NUM_BUFF):
@@ -82,8 +82,8 @@ def analyze_blocks(buff, rx_stream, N, max_int):
                 exit()
 
             expected = (this_value + 1)
-            if expected == (max_int + 1):
-                expected = -(max_int + 1)
+            if expected == (fullscale + 1):
+                expected = -(fullscale + 1)
 
 
 
@@ -100,13 +100,10 @@ def main(cardno, rx_handle, rate, bw, freq):
 
     SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
 
-    # determine max value based upon resolution
-    max_value = sdr.readSetting("max_rx_value")
-
-    print("max value based upon resolution", max_value)
-
-    max_int = int(max_value)
-
+    # get the full scale value for this card
+    rc = sdr.getNativeStreamFormat(SOAPY_SDR_RX, rx_handle)
+    fullscale = int(rc.fullScale)
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"RX fullscale value: {fullscale:,}")
 
     # set the radio to use FPGA counter mode
     sdr.writeSetting("counter", "true")
@@ -155,7 +152,7 @@ def main(cardno, rx_handle, rate, bw, freq):
     sdr.deactivateStream(rx_stream)
     sdr.closeStream(rx_stream)
 
-    analyze_blocks(buff, rx_stream, N, max_int)
+    analyze_blocks(buff, rx_stream, N, fullscale)
    
     ### validate sys timestamps 
     # Create data buffer and start streaming samples to it
@@ -181,7 +178,7 @@ def main(cardno, rx_handle, rate, bw, freq):
     sdr.deactivateStream(rx_stream)
     sdr.closeStream(rx_stream)
 
-    analyze_blocks(buff, rx_stream, N, max_int)
+    analyze_blocks(buff, rx_stream, N, fullscale)
 
 
 def parse_command_line_arguments():

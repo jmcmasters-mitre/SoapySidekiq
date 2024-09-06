@@ -296,13 +296,13 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
         if (format == "CS16")
         {
             txUseShort = true;
-            SoapySDR_log(SOAPY_SDR_INFO, "Using format CS16\n");
+            SoapySDR_log(SOAPY_SDR_INFO, "Using format CS16");
         }
         else if (format == "CF32")
         {
 
             txUseShort = false;
-            SoapySDR_log(SOAPY_SDR_INFO, "Using format CF32\n");
+            SoapySDR_log(SOAPY_SDR_INFO, "Using format CF32");
         }
         else 
         {

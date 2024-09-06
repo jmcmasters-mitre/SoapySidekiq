@@ -1359,13 +1359,6 @@ SoapySDR::ArgInfoList SoapySidekiq::getSettingInfo(void) const
 
     SoapySDR::ArgInfo settingArg;
 
-    settingArg.key         = "max_rx_value";
-    settingArg.value       = "0";
-    settingArg.name        = "max value";
-    settingArg.description = "Maximum rx value based upon resolution of the card.";
-    settingArg.type        = SoapySDR::ArgInfo::INT;
-    setArgs.push_back(settingArg);
-
     settingArg.key         = "iq_swap";
     settingArg.value       = "true";
     settingArg.name        = "I/Q Swap";
@@ -1380,10 +1373,10 @@ SoapySDR::ArgInfoList SoapySidekiq::getSettingInfo(void) const
     settingArg.type        = SoapySDR::ArgInfo::BOOL;
     setArgs.push_back(settingArg);
 
-    settingArg.key         = "log";
-    settingArg.value       = "TRACE";
-    settingArg.name        = "log";
-    settingArg.description = "Set the SoapySDR Log Level";
+    settingArg.key         = "sys_clock_freq";
+    settingArg.value       = "sys_freq";
+    settingArg.name        = "sys_clock_freq";
+    settingArg.description = "The frequency of the system timestamp clock";
     settingArg.type        = SoapySDR::ArgInfo::STRING;
     setArgs.push_back(settingArg);
 
@@ -1392,14 +1385,10 @@ SoapySDR::ArgInfoList SoapySidekiq::getSettingInfo(void) const
     settingArg.name        = "timetype";
     settingArg.description = "The type of timestamp to return in readStream";
     settingArg.type        = SoapySDR::ArgInfo::STRING;
+    settingArg.options.push_back("rf_timestamp");
+    settingArg.options.push_back("sys_timestamp");
     setArgs.push_back(settingArg);
 
-    settingArg.key         = "sys_clock_freq";
-    settingArg.value       = "sys_freq";
-    settingArg.name        = "timetype";
-    settingArg.description = "The frequency of the system timestamp clock";
-    settingArg.type        = SoapySDR::ArgInfo::STRING;
-    setArgs.push_back(settingArg);
     return setArgs;
 }
 
@@ -1411,28 +1400,7 @@ void SoapySidekiq::writeSetting(const std::string &key,
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "writeSetting");
 
-    if (key == "log")
-    {
-        if (value == "trace")
-        {
-            SoapySDR::setLogLevel(SOAPY_SDR_TRACE);
-            SoapySDR_logf(SOAPY_SDR_INFO, "set log level to TRACE on card %u",
-                          this->card);
-        }
-        else if (value == "debug")
-        {
-            SoapySDR::setLogLevel(SOAPY_SDR_DEBUG);
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "set log level to DEBUG on card %u",
-                          this->card);
-        }
-        else
-        {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "invalid log level received %s",
-                          value.c_str());
-            throw std::runtime_error("");
-        }
-    }
-    else if (key == "iq_swap")
+    if (equalsIgnoreCase(key, "iq_swap"))
     {
         this->iq_swap = ((value == "true") ? true : false);
 
@@ -1457,7 +1425,7 @@ void SoapySidekiq::writeSetting(const std::string &key,
                     throw std::runtime_error("");
         }
     }
-    else if (key == "counter")
+    else if (equalsIgnoreCase(key, "counter"))
     {
         if (value == "true")
         {
@@ -1494,7 +1462,7 @@ void SoapySidekiq::writeSetting(const std::string &key,
             }
         }
     }
-    else if (key == "timetype")
+    else if (equalsIgnoreCase(key, "timetype"))
     {
         if (value == "rf_timestamp")
         { 
@@ -1523,27 +1491,19 @@ std::string SoapySidekiq::readSetting(const std::string &key) const
 {
     SoapySDR_logf(SOAPY_SDR_TRACE, "readSetting");
 
-    if (key == "max_rx_value")
-    {
-        return std::to_string((int)this->maxValue);
-    }
-    else if (key == "iq_swap")
+    if (equalsIgnoreCase(key, "iq_swap"))
     {
         return iq_swap ? "true" : "false";
     }
-    else if (key == "counter")
+    else if (equalsIgnoreCase(key, "counter"))
     {
         return counter ? "true" : "false";
     }
-    else if (key == "log")
-    {
-        return std::to_string(SoapySDR::getLogLevel());
-    }
-    else if (key == "timetype")
+    else if (equalsIgnoreCase(key, "timetype"))
     {
         return timetype;
     }
-    else if (key == "sys_clock_freq")
+    else if (equalsIgnoreCase(key, "sys_clock_freq"))
     {
         return std::to_string((uint64_t)this->sys_freq);
     }
