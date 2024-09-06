@@ -4,7 +4,7 @@ import sys
 import time
 import argparse
 import numpy as np
-emport SoapySDR
+import SoapySDR
 print(SoapySDR, __file__)
 from SoapySDR import *
 
@@ -15,7 +15,7 @@ np.set_printoptions(threshold=sys.maxsize)
 ############################################################################################
 # Data transfer settings
 NUM_BUFF = 10
-rx_chan = 0             # RX1 = 0, RX2 = 1
+rx_handle = 0             # RX1 = 0, RX2 = 1
 use_agc = True          # Use or don't use the AGC
 timeout_us = int(10e6)
 
@@ -36,6 +36,9 @@ def main(cardno, rx_chan, fs, bw, freq):
     setting = sdr.readSetting("counter")
     print("read counter", setting)
 
+    # the RAMP function in the FPGA assumes Q then I
+    sdr.writeSetting("iq_swap", "false")
+
     sdr.setSampleRate(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
     sdr.setBandwidth(SOAPY_SDR_RX, rx_chan, fs)          # Set sample rate
     sdr.setGainMode(SOAPY_SDR_RX, rx_chan, use_agc)       # Set the gain mode
@@ -46,26 +49,24 @@ def main(cardno, rx_chan, fs, bw, freq):
 
     # create a re-usable buffer for receiving samples
     N = sdr.getStreamMTU(rx_stream)
-    print("Stream MTU",  N * 6)
+    print("Stream MTU",  N)
 
-    #determine max value based upon resolution
-    max_value = sdr.readSetting("max_rx_value")
-
-    SCALE = float(max_value)
-    max_data = int(SCALE)
-    print("max value based upon resolution", max_data)
+    # get the full scale value for this card
+    rc = sdr.getNativeStreamFormat(SOAPY_SDR_RX, rx_handle)
+    max_data = int(rc.fullScale)
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"RX fullscale value: {max_data:,}")
 
     buff = np.empty([NUM_BUFF, N], dtype=np.csingle)
-    intbuff = np.empty((N*2), dtype=np.int16)
+    intbuff = np.empty((N * 2), dtype=np.int16)
     real = np.zeros(N, dtype=np.int16)
     imag = np.zeros(N, dtype=np.int16)
 
     sdr.activateStream(rx_stream)  # this turns the radio on
 
-    for idx1 in range(NUM_BUFF):
-        print("read block", idx1)
+    for idx in range(NUM_BUFF):
+        print("read block", idx)
 
-        sr = sdr.readStream(rx_stream, [buff[idx1]], N)
+        sr = sdr.readStream(rx_stream, [buff[idx]], N)
 
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
@@ -76,8 +77,8 @@ def main(cardno, rx_chan, fs, bw, freq):
     for i in range(NUM_BUFF):
         print("analyze block", i)
 
-        real = buff[i].real * SCALE
-        imag = buff[i].imag * SCALE
+        real = buff[i].real * max_data
+        imag = buff[i].imag * max_data
 
         #intbuff[0::2] = real
         #intbuff[1::2] = imag

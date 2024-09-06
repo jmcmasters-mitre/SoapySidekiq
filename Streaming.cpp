@@ -652,6 +652,8 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
 
     long waitTime = timeoutUs;
 
+//    SoapySDR_logf(SOAPY_SDR_TRACE, "timeoutUs %ld", timeoutUs);
+
     // if the user didn't give a waittime then wait a LONG time
     if (waitTime == 0)
     {
@@ -676,6 +678,9 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     skiq_rx_block_t *block_ptr = p_rx_block[rxReadIndex];
     char *ringbuffer_ptr = (char *)((char *)block_ptr->data);
     
+    // move to the next buffer in the ring
+    rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
+
     if (this->rfTimeSource == true)
     {
         timeNs = block_ptr->rf_timestamp;
@@ -684,10 +689,6 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     {
         timeNs = block_ptr->sys_timestamp;
     }
-
-
-    // move to the next buffer in the ring
-    rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
 
     uint32_t block_num = 0;
     uint32_t num_blocks = numElems / rx_payload_size_in_words;
@@ -698,7 +699,6 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
         if (rxUseShort == true)
         {
 //            SoapySDR_logf(SOAPY_SDR_DEBUG, "block num %u, first value %d", block_num, (int16_t )buff_ptr[0]);
-
             // CS16
             memcpy(buff_ptr, ringbuffer_ptr, rx_payload_size_in_bytes);
         }
@@ -708,8 +708,9 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
             float *  dbuff_ptr = (float *)buff_ptr;
             int16_t *source = (int16_t *)ringbuffer_ptr;
             int short_ctr = 0;
+            uint32_t i;
 
-            for (uint32_t i = 0; i < rx_payload_size_in_bytes; i++)
+            for (i = 0; i < rx_payload_size_in_words; i++)
             {
                 *dbuff_ptr++ = (float)source[short_ctr + 1] / this->maxValue;
                 *dbuff_ptr++ = (float)source[short_ctr] / this->maxValue;

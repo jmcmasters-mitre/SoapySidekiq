@@ -52,7 +52,7 @@ def transmit(sdr, tx_stream, buff_len, tx_buff, rate):
 
         underruns = sdr.readStreamStatus(tx_stream)
         if last_underruns != underruns.ret:
-            SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"underruns: {underruns.ret\n}")
+            SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"underruns: {underruns.ret}")
             last_underruns = underruns.ret
 
     sdr.deactivateStream(tx_stream)
