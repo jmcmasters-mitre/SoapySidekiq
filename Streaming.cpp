@@ -491,6 +491,7 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
                 card, status);
             throw std::runtime_error("");
         }
+        SoapySDR_logf(SOAPY_SDR_INFO, "TX block size is: %u", DEFAULT_TX_BUFFER_LENGTH); 
 
         //  tx data flow mode
         status = skiq_write_tx_data_flow_mode(card, tx_hdl,
@@ -536,6 +537,7 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
                               card, status);
                 throw std::runtime_error("");
             }
+            SoapySDR_logf(SOAPY_SDR_INFO, "TX start streaming on 1pps");
         }
         else
         {
@@ -547,7 +549,9 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
                               card, status);
                 throw std::runtime_error("");
             }
+            SoapySDR_logf(SOAPY_SDR_INFO, "TX start streaming");
         }
+
     }
 
     return 0;
@@ -651,8 +655,6 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     }
 
     long waitTime = timeoutUs;
-
-//    SoapySDR_logf(SOAPY_SDR_TRACE, "timeoutUs %ld", timeoutUs);
 
     // if the user didn't give a waittime then wait a LONG time
     if (waitTime == 0)

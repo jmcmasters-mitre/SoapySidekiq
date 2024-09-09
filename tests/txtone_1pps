@@ -60,6 +60,9 @@ def main(cardno, serial, handle,
 
     SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Tone buffer length is {buff_len:,} words")
 
+    sdr.setTimeSource("1pps_source_external")
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Time source set to '1pps_source_external'")
+
     if offset is None:
         offset = rate / 4
 
@@ -84,7 +87,7 @@ def main(cardno, serial, handle,
     else:
         sdr.setGain(SOAPY_SDR_TX, handle, float(0))
 
-    sdr.activateStream(tx_stream)  # this turns the radio on
+    sdr.activateStream(tx_stream, SoapySDR.SOAPY_SDR_HAS_TIME)  # this turns the radio on
 
     total_samps = 0
 
