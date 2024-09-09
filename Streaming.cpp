@@ -123,8 +123,10 @@ void SoapySidekiq::rx_receive_operation(void)
         else
         {
             /*
-             *  put the block into a ring buffer so readStream can read it out
-             * at a different pace */
+             * put the block into a ring buffer so readStream can read it out
+             * at a different pace 
+             * skiq_receive is in blocking mode, so it will allow the other 
+             * threads to run */
             status = skiq_receive(card, &rcvd_hdl, &tmp_p_rx_block, &len);
             if (status == skiq_rx_status_success)
             {
@@ -281,6 +283,10 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
             throw std::runtime_error("setupStream invalid format '" + format +
                 "' -- Only CS16 or CF32 is supported by SoapySidekiq module.");
         }
+
+        // We cannot assume the caller will set all default parameters
+        // So set them here first
+        setFrequency(SOAPY_SDR_RX, rx_hdl, rx_center_frequency);
 
         return RX_STREAM;
     }
@@ -681,11 +687,13 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
 
     if (this->rfTimeSource == true)
     {
-        timeNs = block_ptr->rf_timestamp;
+        timeNs = ((float)block_ptr->rf_timestamp / (float)this->rx_sample_rate) * (float)NANOS_IN_SEC;
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "timeNs %lld", timeNs);
     }
     else
     {
-        timeNs = block_ptr->sys_timestamp;
+        timeNs = ((float)block_ptr->sys_timestamp / (float)this->sys_freq) * (float)NANOS_IN_SEC;
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "timeNs %lld", timeNs);
     }
 
     uint32_t block_num = 0;
@@ -825,6 +833,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             ready = false;
             pthread_cond_wait(&space_avail_cond, &space_avail_mutex);
             pthread_mutex_unlock(&space_avail_mutex);
+     //       SoapySDR_logf(SOAPY_SDR_TRACE, "leaving wait");
 
             // space available so try again
             continue;
@@ -857,6 +866,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             }
             ready = false;
             pthread_mutex_unlock(&space_avail_mutex);
+    //        SoapySDR_logf(SOAPY_SDR_TRACE, "leaving full");
         }
         else if (status != 0)
         {
@@ -864,14 +874,18 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
                           card, status);
             throw std::runtime_error("");
         }
+        else
+        {
+            curr_block++;
 
-        curr_block++;
+            // move the index into the transmit block array
+            currTXBuffIndex = (currTXBuffIndex + 1) % DEFAULT_NUM_BUFFERS;
 
-        // move the index into the transmit block array
-        currTXBuffIndex = (currTXBuffIndex + 1) % DEFAULT_NUM_BUFFERS;
+            // move the pointer to the next block in the received buffer
+            inbuff_ptr += (DEFAULT_TX_BUFFER_LENGTH * 4);
+ 
+        }
 
-        // move the pointer to the next block in the received buffer
-        inbuff_ptr += (DEFAULT_TX_BUFFER_LENGTH * 4);
     }
 
     return numElems;

@@ -27,6 +27,7 @@ def transmit(sdr, tx_stream, buff_len, tx_buff, rate):
     global running, tx_total_samps, tx_total_blocks
     SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"in transmit")
 
+    print(f"tx buff len: {buff_len}")
     sdr.activateStream(tx_stream)  # this turns the radio on
 
     last_underruns = 0
@@ -40,15 +41,11 @@ def transmit(sdr, tx_stream, buff_len, tx_buff, rate):
                 SoapySDR.log(SoapySDR.SOAPY_SDR_ERROR, 
                              'TX Error {}: {}'.format(rc.ret, errToStr(rc.ret)))
 
+            #print(f"-{tx_total_blocks}", end='\n', flush=True)
             tx_total_samps += buff_len
 
         except KeyboardInterrupt:
             break
-
-
-#        if (tx_total_samps / rate) > 0:
-#            print("+ ", end='', flush=True)
-#            tx_total_samps = 0
 
         underruns = sdr.readStreamStatus(tx_stream)
         if last_underruns != underruns.ret:
@@ -62,12 +59,12 @@ def transmit(sdr, tx_stream, buff_len, tx_buff, rate):
 
 
 def receive(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name):
-    global running, rx_total_samps, rx_total_blocks
+    global running, rx_total_samps, rx_total_blocks, tx_total_blocks
 
     SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"in receive")
 
     sdr.activateStream(rx_stream)  # this turns the radio on
-
+    
     for idx in range(num_blocks):
         if not running:
             break
@@ -80,6 +77,7 @@ def receive(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name):
             SoapySDR.log(SoapySDR.SOAPY_SDR_ERROR, f"RX Error {rc.ret} ")
 
         rx_total_samps += buff_len
+        #print(f"+{rx_total_blocks}", end='\n', flush=True)
 
     SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, 
             f"Receive is complete, received {rx_total_samps:,} samples")
@@ -148,7 +146,7 @@ def main(cardno, serial,
     tx_stream = sdr.setupStream(SOAPY_SDR_TX, SOAPY_SDR_CS16, [tx_handle])
 
     # make the buffer the size of the MTU * The number of MTU we want in one go
-    rx_buff_len = sdr.getStreamMTU(rx_stream) * 8
+    rx_buff_len = sdr.getStreamMTU(rx_stream) * 8 
     tx_buff_len = sdr.getStreamMTU(tx_stream)
 
     SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"RX Buffer length is {rx_buff_len:,} words")
@@ -212,10 +210,17 @@ def main(cardno, serial,
     transmit_thread.start()
     receive_thread.start()
 
+    time_ctr = 0
     while running:
         try:
-            print(f"\trx_total_samps: {rx_total_samps:,}, \trx_total_blocks: {rx_total_blocks:,}\n")
-            print(f"\ttx_total_samps: {tx_total_samps:,}, \ttx_total_blocks: {tx_total_blocks:,}\n")
+            time.sleep(1)
+            time_ctr += 1
+
+            print(f"\trx_total_samps: {rx_total_samps:,}, \trx_total_blocks: {rx_total_blocks:,}"
+                    f"\trx samp/sec: {int(rx_total_samps / time_ctr):,}")
+
+            print(f"\ttx_total_samps: {tx_total_samps:,}, \ttx_total_blocks: {tx_total_blocks:,}"
+                    f"\ttx samp/sec: {int(tx_total_samps / time_ctr):,}\n")
 
         except FileNotFoundError:
             print("File not found.")
@@ -224,7 +229,6 @@ def main(cardno, serial,
             print("OS error occurred.")
             running = False;
 
-        time.sleep(1)
     
     transmit_thread.join()
     receive_thread.join()
@@ -243,7 +247,7 @@ def parse_command_line_arguments():
     parser.add_argument('--rx-handle', type=int, required=False, dest='rx_handle',
                         default=0, help='Handle [0 or 1]')
     parser.add_argument('--tx-handle', type=int, required=False, dest='tx_handle',
-                        default=2, help='Handle [0 or 1]')
+                        default=0, help='Handle [0 or 1]')
     parser.add_argument('-r', type=float, required=False, dest='rate',
                         default=40e6, help='Sample Rate')
     parser.add_argument('-bw', type=float, required=False, dest='bw',

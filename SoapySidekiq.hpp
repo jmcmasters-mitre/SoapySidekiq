@@ -18,9 +18,8 @@
 #include <SoapySDR/Types.hpp>
 
 #define DEFAULT_NUM_BUFFERS (3000)
-#define DEFAULT_ELEMS_PER_SAMPLE (2)
 #define DEFAULT_TX_BUFFER_LENGTH (8188)
-#define DEFAULT_SLEEP_US (100)
+#define DEFAULT_SLEEP_US (1)
 #define SLEEP_1SEC (1 * 1000000)
 #define NANOS_IN_SEC (1000000000ULL)
 

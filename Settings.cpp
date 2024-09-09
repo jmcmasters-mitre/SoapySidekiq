@@ -25,6 +25,10 @@ void SoapySidekiq::tx_complete(int32_t status, skiq_tx_block_t *p_data, uint32_t
 
     // update the in use status of the packet just completed
     tx_buf_mutex.lock();
+    if (p_tx_status[txIndex] != 1)
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "status isn't 1");
+    }
     p_tx_status[txIndex] = 0;
     tx_buf_mutex.unlock();
 
@@ -37,6 +41,8 @@ void SoapySidekiq::tx_complete(int32_t status, skiq_tx_block_t *p_data, uint32_t
         pthread_cond_signal(&space_avail_cond);
         pthread_mutex_unlock(&space_avail_mutex);
     }
+//    SoapySDR_logf(SOAPY_SDR_TRACE, "leaving tx_complete");
+
 }
 
 
@@ -64,7 +70,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
 
     /* We need to set some default parameters in case the user does not */
 
-    SoapySDR::setLogLevel(SOAPY_SDR_TRACE);
+    SoapySDR::setLogLevel(SOAPY_SDR_INFO);
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "in constructor", card);
 

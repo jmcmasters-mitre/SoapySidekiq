@@ -19,6 +19,7 @@ NUM_BLOCKS = 4
 rx_handle = 0             # RX1 = 0, RX2 = 1
 use_agc = True          # Use or don't use the AGC
 timeout_us = int(10e6)
+NANOS_IN_SEC = 1e9
 
 def get_blocks(buff, rx_stream, N, flag, rate, sys_freq):
     first = True
@@ -34,30 +35,31 @@ def get_blocks(buff, rx_stream, N, flag, rate, sys_freq):
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
 
+        # timestamp is returned in nanoseconds
+        # if rf timestamps then sys_freq == rate
+        # if sys timestamps then sys_freq == actual clock rate
         actual = sr.timeNs
         delta = actual - expected_timestamp
-        ratio = sys_freq / rate
+        ratio = (1 / sys_freq) * NANOS_IN_SEC
         adder = ratio * N
         
         if first:
             first = False
         else:
-
             if flag == "rf":
                 if expected_timestamp != actual:
                     print(f"timestamp failure, expected: {expected_timestamp}, actual {actual}")
+                    print(f"delta: {delta:,}, rate {rate:,}, ratio {ratio}, N {N:,}, adder {int(adder):,}")
+                    print(f"delta + addr {delta + int(adder)}")
                     exit(-1)
             else:
                 if expected_timestamp != actual and expected_timestamp != actual - 1:
                     print(f"timestamp failure, expected: {expected_timestamp:,}, actual {actual:,}")
                     print(f"delta: {delta:,}, rate {rate:,}, ratio {ratio}, N {N:,}, adder {int(adder):,}")
-                    print(f"delta + addr {delta + int(adder)}")
+                    print(f"sys_freq: {sys_freq},  delta + addr {delta + int(adder)}")
 
 
-        if flag == "rf":
-            expected_timestamp = sr.timeNs + N 
-        else:
-            expected_timestamp = sr.timeNs + int(adder) 
+        expected_timestamp = sr.timeNs + int(adder) 
 
 
 
@@ -141,8 +143,8 @@ def main(cardno, rx_handle, rate, bw, freq):
     print(f"buff shape {buff.shape}")
 
     setting = sdr.readSetting("sys_clock_freq")
-    ref_rate = int(setting)
-    print(f"sys rate is {ref_rate:,}")
+    sys_clock_rate = int(setting)
+    print(f"sys rate is {sys_clock_rate:,}")
 
     # reset the timestamps
     sdr.setHardwareTime(0, "now")
@@ -150,7 +152,7 @@ def main(cardno, rx_handle, rate, bw, freq):
     # start streaming
     sdr.activateStream(rx_stream)  
 
-    get_blocks(buff, rx_stream, N, "rf", rate, ref_rate)
+    get_blocks(buff, rx_stream, N, "rf", rate, rate)
 
     # stop streaming
     sdr.deactivateStream(rx_stream)
@@ -176,7 +178,7 @@ def main(cardno, rx_handle, rate, bw, freq):
     # start the streaming
     sdr.activateStream(rx_stream)  
 
-    get_blocks(buff, rx_stream, N, "sys", rate, ref_rate)
+    get_blocks(buff, rx_stream, N, "sys", rate, sys_clock_rate)
 
     # stop the streaming
     sdr.deactivateStream(rx_stream)
