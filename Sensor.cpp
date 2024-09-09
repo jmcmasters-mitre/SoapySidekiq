@@ -35,7 +35,7 @@ std::string SoapySidekiq::readSensor(const std::string &key) const
     }
     bool supported = false;
 
-    if (key.compare("accelerometer")== 0)
+    if (key.compare("accelerometer") == 0)
     {
         status = skiq_is_accel_supported(card, &supported);
         if (status != 0)
@@ -89,7 +89,7 @@ std::string SoapySidekiq::readSensor(const std::string &key) const
         };
         std::stringstream ss;
         ss << "{\"x\":" << x_data << " \"y\":" << y_data << " \"z\":" << z_data
-           << "}"; //  json format
+           << "}";   
 
         SoapySDR_logf(SOAPY_SDR_DEBUG, "accel data %s", (ss.str().c_str()));
         return ss.str();
