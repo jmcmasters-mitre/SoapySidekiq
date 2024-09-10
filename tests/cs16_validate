@@ -30,7 +30,6 @@ def get_blocks(buff, rx_stream, N, rate):
         print("read block", idx1)
 
         sr = sdr.readStream(rx_stream, [buff[idx1]], N)
-        print(f"expected ts: {expected_timestamp:,},  actual ts: {sr.timeNs:,}")
 
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
@@ -49,8 +48,8 @@ def get_blocks(buff, rx_stream, N, rate):
             if expected_timestamp != actual:
                 print(f"timestamp failure, expected: {expected_timestamp:,}, actual {actual:,}")
                 print(f"delta: {delta:,}, ratio {ratio}, N {N:,}, adder {int(adder):,}")
-                print(f"sys_freq: {sys_freq},  delta + addr {delta + int(adder)}")
-
+            else:
+                print("timestamp check passed")
 
         expected_timestamp = sr.timeNs + int(adder) 
 

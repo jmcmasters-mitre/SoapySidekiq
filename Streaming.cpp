@@ -687,13 +687,15 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
 
     if (this->rfTimeSource == true)
     {
-        timeNs = ((float)block_ptr->rf_timestamp / (float)this->rx_sample_rate) * (float)NANOS_IN_SEC;
-        SoapySDR_logf(SOAPY_SDR_DEBUG, "timeNs %lld", timeNs);
+        timeNs = ((float)block_ptr->rf_timestamp / 
+                  (float)this->rx_sample_rate) * 
+                  (float)NANOS_IN_SEC;
     }
     else
     {
-        float temp_timeNs = ((float)block_ptr->sys_timestamp / (float)this->sys_freq) * (float)NANOS_IN_SEC;
-        timeNs = (long long)(temp_timeNs);
+        timeNs = ((float)block_ptr->sys_timestamp / 
+                  (float)this->sys_freq) * 
+                  (float)NANOS_IN_SEC;
     }
 
     uint32_t block_num = 0;
