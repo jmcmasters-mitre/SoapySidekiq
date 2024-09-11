@@ -441,6 +441,16 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         start_signal = true;
         _cv.notify_one();  // Notify the thread to run
 
+        int status = 0;
+        status = skiq_read_sys_timestamp_freq(this->card, &this->sys_freq);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                    "skiq_read_sys_timestamp_freq failed: (card %d), status %d",
+                    card, status);
+            throw std::runtime_error("");
+        }
+
         /* start rx streaming */
         if (flags == SOAPY_SDR_HAS_TIME)
         {
@@ -690,12 +700,18 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
         timeNs = ((float)block_ptr->rf_timestamp / 
                   (float)this->rx_sample_rate) * 
                   (float)NANOS_IN_SEC;
+
+//        SoapySDR_logf(SOAPY_SDR_DEBUG, "rf_timestamp %lld, timeNs %lld", 
+//               block_ptr->rf_timestamp, timeNs);
     }
     else
     {
-        timeNs = ((float)block_ptr->sys_timestamp / 
-                  (float)this->sys_freq) * 
-                  (float)NANOS_IN_SEC;
+        timeNs = ((double)block_ptr->sys_timestamp / 
+                  (double)this->sys_freq) * 
+                  (double)NANOS_IN_SEC;
+
+//        SoapySDR_logf(SOAPY_SDR_DEBUG, "sys_freq %ld, sys_timestamp %lld, timeNs %lld", 
+//                this->sys_freq, block_ptr->sys_timestamp, timeNs);
     }
 
     uint32_t block_num = 0;

@@ -225,15 +225,6 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         p_tx_status[i] = 0;
     }
 
-    status = skiq_read_sys_timestamp_freq(this->card, &this->sys_freq);
-    if (status != 0)
-    {
-        SoapySDR_logf(SOAPY_SDR_ERROR,
-                "skiq_read_sys_timestamp_freq failed: (card %d), status %d",
-                card, status);
-        throw std::runtime_error("");
-    }
-
     // register the callback
     status = skiq_register_tx_complete_callback(card,
                                         &SoapySidekiq::static_tx_complete_callback);

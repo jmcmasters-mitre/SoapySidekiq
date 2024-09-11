@@ -45,7 +45,11 @@ def get_blocks(buff, rx_stream, N, rate):
         if first:
             first = False
         else:
-            if expected_timestamp != actual:
+            # if using sys_timestamp it may be off by one tick, if the sample rate and 
+            # sys_clock freq are not divisible exactly.
+            if (expected_timestamp != actual and 
+                expected_timestamp != actual + 1 and
+                expected_timestamp != actual - 1):
                 print(f"timestamp failure, expected: {expected_timestamp:,}, actual {actual:,}")
                 print(f"delta: {delta:,}, ratio {ratio}, N {N:,}, adder {int(adder):,}")
             else:
