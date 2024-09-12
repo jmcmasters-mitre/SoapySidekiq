@@ -1711,12 +1711,14 @@ long long SoapySidekiq::getHardwareTime(const std::string &what="") const
 void SoapySidekiq::setHardwareTime(const long long timeNs, const std::string &what="")
 {
     int status = 0;
+    double double_timestamp = 0;
     uint64_t new_timestamp = 0;
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "setHardwareTime");
 
     // convert timeNs to sys timestamp frequency
-    new_timestamp = (timeNs * this->sys_freq) / NANOS_IN_SEC;
+    double_timestamp = (double)timeNs * (double)this->sys_freq / (double)NANOS_IN_SEC;
+    new_timestamp = (uint64_t)double_timestamp;
 
     if (equalsIgnoreCase(what, "now"))
     {
@@ -1729,7 +1731,7 @@ void SoapySidekiq::setHardwareTime(const long long timeNs, const std::string &wh
             throw std::runtime_error("");
         }
 
-        SoapySDR_logf(SOAPY_SDR_INFO, "card %d, updated timestamps to %lu",
+        SoapySDR_logf(SOAPY_SDR_INFO, "card %u, updated both timestamps to %lld",
                       card, new_timestamp);
 
         return;

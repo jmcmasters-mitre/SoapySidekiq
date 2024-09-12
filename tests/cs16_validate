@@ -30,6 +30,7 @@ def get_blocks(buff, rx_stream, N, rate):
         print("read block", idx1)
 
         sr = sdr.readStream(rx_stream, [buff[idx1]], N)
+        print(f"expected: {expected_timestamp:,}, actual {sr.timeNs:,}")
 
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
@@ -107,7 +108,7 @@ def main(cardno, rx_handle, rate, bw, freq):
     # set the radio to use FPGA counter mode
     sdr.writeSetting("counter", "true")
     setting = sdr.readSetting("counter")
-    print("read counter", setting)
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"read counter: {setting}")
 
     # the RAMP function in the FPGA assumes Q then I
     sdr.writeSetting("iq_swap", "false")
@@ -120,9 +121,9 @@ def main(cardno, rx_handle, rate, bw, freq):
     ### validate rf timestamps 
     sdr.writeSetting("timetype", "rf_timestamp")
     setting = sdr.readSetting("timetype")
-    print("read timetype", setting)
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"read timetype: {setting}")
 
-    print("\n*** Note: using rf timestamps")
+    print("\n\n*** Note: using rf timestamps")
 
     # Create data buffer and start streaming samples to it
     rx_stream = sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CS16, [rx_handle])  # Setup data stream
@@ -130,20 +131,15 @@ def main(cardno, rx_handle, rate, bw, freq):
     # create a re-usable buffer for receiving samples
     MTU = sdr.getStreamMTU(rx_stream) 
     
-    print("Stream MTU",  MTU)
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Stream MTU: {MTU:,}")
 
     N = MTU * NUM_BLOCKS
-    print(f"NumBlocks {NUM_BLOCKS} NumElms {N}, num shorts {N * 2}")
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Total RX block size: {N:,}")
 
     buff = np.empty([NUM_BUFF, 2 * N], dtype='<i2')
-    print(f"buff shape {buff.shape}")
 
-    setting = sdr.readSetting("sys_clock_freq")
-    sys_clock_rate = int(setting)
-    print(f"sys rate is {sys_clock_rate:,}")
-
-    # reset the timestamps
-    sdr.setHardwareTime(0, "now")
+    # reset the timestamps to a very large number
+    sdr.setHardwareTime(172567433904834834, "now")
 
     # start streaming
     sdr.activateStream(rx_stream)  
@@ -162,14 +158,12 @@ def main(cardno, rx_handle, rate, bw, freq):
 
     sdr.writeSetting("timetype", "sys_timestamp")
     setting = sdr.readSetting("timetype")
-    print("read timetype", setting)
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"read timetype: {setting}")
 
+    print("\n\n*** Note: using system timestamps means the expected timestamp may be off by 1 tick")
 
-
-    print("\n*** Note: using system timestamps means the expected timestamp may be off by 1 tick")
-
-    # reset the timestamps
-    sdr.setHardwareTime(0, "now")
+    # reset the timestamps to a very large number
+    sdr.setHardwareTime(172567433904834834, "now")
 
     # start the streaming
     sdr.activateStream(rx_stream)  

@@ -14,6 +14,20 @@
 // could not understand why
 bool   start_signal = false;
 
+long long convert_timestamp_to_nanos(
+        const uint64_t timestamp, const uint64_t timestamp_freq)
+{
+    // Following 3 lines could be stored in a lookup table where
+    // sys_timestamp_freq is the key
+    const double nanos_per_tic = 1.0/timestamp_freq*1e9;
+    const uint64_t whole_nanos_per_tic = static_cast<uint64_t>(nanos_per_tic);
+    const double frac_nanos_per_tic = nanos_per_tic - whole_nanos_per_tic;
+    const long long nanos =
+        static_cast<long long>(timestamp * whole_nanos_per_tic) +
+        static_cast<long long>(timestamp * frac_nanos_per_tic);
+    return nanos;
+}
+
 
 std::vector<std::string> SoapySidekiq::getStreamFormats(
     const int direction, const size_t channel) const
@@ -234,7 +248,7 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
 
         rx_hdl = (skiq_rx_hdl_t)channels.at(0);
 
-        SoapySDR_logf(SOAPY_SDR_INFO, "The RX handle is: %u", rx_hdl);
+        SoapySDR_logf(SOAPY_SDR_INFO, "RX handle: %u", rx_hdl);
 
         status = skiq_read_rx_block_size(card, skiq_rx_stream_mode_balanced);
         if (status < 0)
@@ -250,7 +264,7 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
         rx_payload_size_in_bytes = status - SKIQ_RX_HEADER_SIZE_IN_BYTES;
         rx_payload_size_in_words = rx_payload_size_in_bytes / 4;
 
-        SoapySDR_logf(SOAPY_SDR_INFO, "rx payload size in words: %u",
+        SoapySDR_logf(SOAPY_SDR_INFO, "RX payload size in words: %u",
                                        rx_payload_size_in_words);
 
         // allocate the RAM buffers
@@ -287,6 +301,18 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
         // We cannot assume the caller will set all default parameters
         // So set them here first
         setFrequency(SOAPY_SDR_RX, rx_hdl, rx_center_frequency);
+
+        // this has to be called after setting sample rate
+        int status = 0;
+        status = skiq_read_sys_timestamp_freq(this->card, &this->sys_freq);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                    "skiq_read_sys_timestamp_freq failed: (card %d), status %d",
+                    card, status);
+            throw std::runtime_error("");
+        }
+        SoapySDR_logf(SOAPY_SDR_INFO, "System Timestamp Freq: %llu", this->sys_freq);
 
         return RX_STREAM;
     }
@@ -362,8 +388,6 @@ size_t SoapySidekiq::getStreamMTU(SoapySDR::Stream *stream) const
 
     if (stream == RX_STREAM)
     {
-        SoapySDR_logf(SOAPY_SDR_INFO, "block size %u", rx_payload_size_in_words);
-
         return (rx_payload_size_in_words);
     }
     else if (stream == TX_STREAM)
@@ -438,18 +462,9 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         // signal it to start running
         std::lock_guard<std::mutex> lock(rx_mutex);
 
+        // Notify the thread to run
         start_signal = true;
-        _cv.notify_one();  // Notify the thread to run
-
-        int status = 0;
-        status = skiq_read_sys_timestamp_freq(this->card, &this->sys_freq);
-        if (status != 0)
-        {
-            SoapySDR_logf(SOAPY_SDR_ERROR,
-                    "skiq_read_sys_timestamp_freq failed: (card %d), status %d",
-                    card, status);
-            throw std::runtime_error("");
-        }
+        _cv.notify_one();  
 
         /* start rx streaming */
         if (flags == SOAPY_SDR_HAS_TIME)
@@ -697,18 +712,20 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
 
     if (this->rfTimeSource == true)
     {
-        timeNs = ((float)block_ptr->rf_timestamp / 
-                  (float)this->rx_sample_rate) * 
-                  (float)NANOS_IN_SEC;
+        timeNs = convert_timestamp_to_nanos(block_ptr->rf_timestamp, rx_sample_rate);
+//        timeNs = ((float)block_ptr->rf_timestamp / 
+//                  (float)this->rx_sample_rate) * 
+//                  (float)NANOS_IN_SEC;
 
 //        SoapySDR_logf(SOAPY_SDR_DEBUG, "rf_timestamp %lld, timeNs %lld", 
 //               block_ptr->rf_timestamp, timeNs);
     }
     else
     {
-        timeNs = ((double)block_ptr->sys_timestamp / 
-                  (double)this->sys_freq) * 
-                  (double)NANOS_IN_SEC;
+        timeNs = convert_timestamp_to_nanos(block_ptr->sys_timestamp, sys_freq);
+//        timeNs = ((double)block_ptr->sys_timestamp / 
+//                  (double)this->sys_freq) * 
+//                  (double)NANOS_IN_SEC;
 
 //        SoapySDR_logf(SOAPY_SDR_DEBUG, "sys_freq %ld, sys_timestamp %lld, timeNs %lld", 
 //                this->sys_freq, block_ptr->sys_timestamp, timeNs);
