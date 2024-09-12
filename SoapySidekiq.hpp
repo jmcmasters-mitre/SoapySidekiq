@@ -17,6 +17,10 @@
 #include <SoapySDR/Logger.hpp>
 #include <SoapySDR/Types.hpp>
 
+
+#define DEFAULT_SAMPLE_RATE (20000000)
+#define DEFAULT_BANDWIDTH (18000000)
+#define DEFAULT_FREQUENCY (1000000000)
 #define DEFAULT_NUM_BUFFERS (3000)
 #define DEFAULT_TX_BUFFER_LENGTH (8188)
 #define DEFAULT_SLEEP_US (1)
@@ -217,6 +221,9 @@ class SoapySidekiq : public SoapySDR::Device
 
 
     private:
+        long long convert_timestamp_to_nanos(const uint64_t timestamp, 
+                                             const uint64_t timestamp_freq) const;
+
         SoapySDR::Stream *const TX_STREAM = (SoapySDR::Stream *)0x1;
         SoapySDR::Stream *const RX_STREAM = (SoapySDR::Stream *)0x2;
 
@@ -243,7 +250,8 @@ class SoapySidekiq : public SoapySDR::Device
         uint8_t num_rx_channels{};
         skiq_rx_hdl_t rx_hdl{};
         uint64_t rx_center_frequency{};
-        uint32_t rx_sample_rate{}, rx_bandwidth{};
+        uint32_t rx_sample_rate{};
+        uint32_t rx_bandwidth{};
         uint32_t rx_block_size_in_words{};
         uint32_t rx_block_size_in_bytes{};
         uint32_t rx_payload_size_in_bytes{};
@@ -280,6 +288,7 @@ class SoapySidekiq : public SoapySDR::Device
         skiq_tx_block_t *p_tx_block[DEFAULT_NUM_BUFFERS];
         uint32_t currTXBuffIndex{};
         uint32_t p_tx_block_index{};
+
 
         // TX callback static function
         // The registration requires a static function instead of a method so

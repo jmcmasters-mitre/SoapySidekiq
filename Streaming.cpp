@@ -14,11 +14,9 @@
 // could not understand why
 bool   start_signal = false;
 
-long long convert_timestamp_to_nanos(
-        const uint64_t timestamp, const uint64_t timestamp_freq)
+long long SoapySidekiq::convert_timestamp_to_nanos(
+        const uint64_t timestamp, const uint64_t timestamp_freq) const
 {
-    // Following 3 lines could be stored in a lookup table where
-    // sys_timestamp_freq is the key
     const double nanos_per_tic = 1.0/timestamp_freq*1e9;
     const uint64_t whole_nanos_per_tic = static_cast<uint64_t>(nanos_per_tic);
     const double frac_nanos_per_tic = nanos_per_tic - whole_nanos_per_tic;
@@ -108,7 +106,7 @@ void SoapySidekiq::rx_receive_operation(void)
 
 
     // metadata
-    uint64_t      overload = 0;
+    uint64_t overload = 0;
     skiq_rx_hdl_t rcvd_hdl;
 
     std::unique_lock<std::mutex> lock(rx_mutex);
@@ -189,29 +187,13 @@ void SoapySidekiq::rx_receive_operation(void)
                     // buffers copy the header in also
                     memcpy(p_rx_block[rxWriteIndex], (void *)tmp_p_rx_block,
                            (num_words_read * sizeof(uint32_t)));
-#ifdef DEBUG
-                    uint8_t *temp_ptr = (uint8_t *)p_rx_block[rxWriteIndex];
-
-                    for (int i = 0; i < num_words_read; i++)
-                    {
-                        if ((rxWriteIndex == 0) && (i < 10 || i > 1000))
-                        {
-                            SoapySDR_logf(SOAPY_SDR_DEBUG,
-                                          "R %d, 0x%02X%02X 0x%02X%02X ", i,
-                                          *temp_ptr++, *temp_ptr++, *temp_ptr++,
-                                          *temp_ptr++);
-                        }
-                    }
-
-                    printf(" done \n");
-#endif
 
                     rxWriteIndex = (rxWriteIndex + 1) % DEFAULT_NUM_BUFFERS;
                 }
             }
             else
             {
-                if (status != -1)
+                if (status != skiq_rx_status_no_data)
                 {
                     SoapySDR_logf(SOAPY_SDR_FATAL,
                                   "skiq_receive failed, (card %u) status %d",
@@ -258,14 +240,14 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
                                            card, status);
             throw std::runtime_error("");
         }
-        rx_block_size_in_bytes   = status;
-        rx_block_size_in_words   = status / 4;
+        rx_block_size_in_bytes = status;
+        rx_block_size_in_words = status / 4;
 
         rx_payload_size_in_bytes = status - SKIQ_RX_HEADER_SIZE_IN_BYTES;
         rx_payload_size_in_words = rx_payload_size_in_bytes / 4;
 
         SoapySDR_logf(SOAPY_SDR_INFO, "RX payload size in words: %u",
-                                       rx_payload_size_in_words);
+                      rx_payload_size_in_words);
 
         // allocate the RAM buffers
         for (int i = 0; i < DEFAULT_NUM_BUFFERS; i++)
@@ -300,7 +282,20 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
 
         // We cannot assume the caller will set all default parameters
         // So set them here first
-        setFrequency(SOAPY_SDR_RX, rx_hdl, rx_center_frequency);
+        if (rx_sample_rate == 0)
+        {
+            setSampleRate(SOAPY_SDR_RX, rx_hdl, DEFAULT_SAMPLE_RATE);
+        }
+
+        if (rx_bandwidth == 0)
+        {
+            setBandwidth(SOAPY_SDR_RX, rx_hdl, DEFAULT_BANDWIDTH);
+        }
+
+        if (rx_center_frequency == 0)
+        {
+            setFrequency(SOAPY_SDR_RX, rx_hdl, DEFAULT_FREQUENCY);
+        }
 
         // this has to be called after setting sample rate
         int status = 0;
@@ -308,8 +303,8 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
-                    "skiq_read_sys_timestamp_freq failed: (card %d), status %d",
-                    card, status);
+                          "skiq_read_sys_timestamp_freq failed: (card %d), status %d",
+                           card, status);
             throw std::runtime_error("");
         }
         SoapySDR_logf(SOAPY_SDR_INFO, "System Timestamp Freq: %llu", this->sys_freq);
@@ -354,11 +349,28 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
 
         tx_hdl = (skiq_tx_hdl_t)channels.at(0);
 
+        // We cannot assume the caller will set all default parameters
+        // So set them here first
+        if (tx_sample_rate == 0)
+        {
+            setSampleRate(SOAPY_SDR_TX, rx_hdl, DEFAULT_SAMPLE_RATE);
+        }
+
+        if (tx_bandwidth == 0)
+        {
+            setBandwidth(SOAPY_SDR_TX, rx_hdl, DEFAULT_BANDWIDTH);
+        }
+
+        if (tx_center_frequency == 0)
+        {
+            setFrequency(SOAPY_SDR_TX, rx_hdl, DEFAULT_FREQUENCY);
+        }
+
         return TX_STREAM;
     }
     else
     {
-        throw std::runtime_error("Invalid direction");
+        throw std::runtime_error("invalid direction");
     }
 }
 
@@ -427,16 +439,6 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
             SoapySDR_logf(SOAPY_SDR_INFO, "RX is set to I then Q order");
         }
 
-        skiq_iq_order_t iq_order;
-        status = skiq_read_iq_order_mode(card, &iq_order);
-        if (status != 0)
-        {
-            SoapySDR_logf(SOAPY_SDR_ERROR,
-                         "skiq_read_iq_order_mode failed, (card %u) status %d",
-                         card, status);
-            throw std::runtime_error("");
-        }
-
         /* set a modest rx timeout to make skiq_receive blocking*/
         status = skiq_set_rx_transfer_timeout(card, 100000);
         if (status != 0)
@@ -459,7 +461,6 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
                 std::thread(&SoapySidekiq::rx_receive_operation, this);
         }
 
-        // signal it to start running
         std::lock_guard<std::mutex> lock(rx_mutex);
 
         // Notify the thread to run
@@ -514,10 +515,9 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
             skiq_write_tx_block_size(card, tx_hdl, DEFAULT_TX_BUFFER_LENGTH);
         if (status != 0)
         {
-            SoapySDR_logf(
-                SOAPY_SDR_ERROR,
-                "skiq_write_tx_block_size failed, (card %u) status %d",
-                card, status);
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                         "skiq_write_tx_block_size failed, (card %u) status %d",
+                          card, status);
             throw std::runtime_error("");
         }
         SoapySDR_logf(SOAPY_SDR_INFO, "TX block size is: %u", DEFAULT_TX_BUFFER_LENGTH);
@@ -591,10 +591,7 @@ int SoapySidekiq::deactivateStream(SoapySDR::Stream *stream, const int flags,
     int status = 0;
     SoapySDR_logf(SOAPY_SDR_TRACE, "deactivateStream");
 
-    if (flags != 0)
-        return SOAPY_SDR_NOT_SUPPORTED;
-
-    if (stream == RX_STREAM && rx_running == true)
+    if (stream == RX_STREAM)
     {
         // stop receive thread
         rx_running = false;
@@ -675,10 +672,11 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
 
     if (numElems % rx_payload_size_in_words != 0)
     {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "numElems must be a multiple of the rx block size "
+        SoapySDR_logf(SOAPY_SDR_ERROR, "numElems must be a multiple of the RX block size "
                      " numElems %d, block size %u",
                      numElems, rx_payload_size_in_words);
         throw std::runtime_error("");
+        return 0;
     }
 
     long waitTime = timeoutUs;
@@ -713,22 +711,10 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     if (this->rfTimeSource == true)
     {
         timeNs = convert_timestamp_to_nanos(block_ptr->rf_timestamp, rx_sample_rate);
-//        timeNs = ((float)block_ptr->rf_timestamp / 
-//                  (float)this->rx_sample_rate) * 
-//                  (float)NANOS_IN_SEC;
-
-//        SoapySDR_logf(SOAPY_SDR_DEBUG, "rf_timestamp %lld, timeNs %lld", 
-//               block_ptr->rf_timestamp, timeNs);
     }
     else
     {
         timeNs = convert_timestamp_to_nanos(block_ptr->sys_timestamp, sys_freq);
-//        timeNs = ((double)block_ptr->sys_timestamp / 
-//                  (double)this->sys_freq) * 
-//                  (double)NANOS_IN_SEC;
-
-//        SoapySDR_logf(SOAPY_SDR_DEBUG, "sys_freq %ld, sys_timestamp %lld, timeNs %lld", 
-//                this->sys_freq, block_ptr->sys_timestamp, timeNs);
     }
 
     uint32_t block_num = 0;
@@ -805,7 +791,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
 
     if (numElems % DEFAULT_TX_BUFFER_LENGTH != 0)
     {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "numElems must be a multiple of the tx MTU size "
+        SoapySDR_logf(SOAPY_SDR_ERROR, "numElems must be a multiple of the TX MTU size "
                      " numElems %d, block size %u",
                      numElems, DEFAULT_TX_BUFFER_LENGTH);
         throw std::runtime_error("");
@@ -868,7 +854,6 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             ready = false;
             pthread_cond_wait(&space_avail_cond, &space_avail_mutex);
             pthread_mutex_unlock(&space_avail_mutex);
-     //       SoapySDR_logf(SOAPY_SDR_TRACE, "leaving wait");
 
             // space available so try again
             continue;
@@ -894,6 +879,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
 
             // if there's no space left to send, wait until there should be space available
             pthread_mutex_lock(&space_avail_mutex);
+
             // wait for a packet to complete
             while (!ready)
             {
@@ -901,7 +887,6 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             }
             ready = false;
             pthread_mutex_unlock(&space_avail_mutex);
-    //        SoapySDR_logf(SOAPY_SDR_TRACE, "leaving full");
         }
         else if (status != 0)
         {
@@ -916,7 +901,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             // move the index into the transmit block array
             currTXBuffIndex = (currTXBuffIndex + 1) % DEFAULT_NUM_BUFFERS;
 
-            // move the pointer to the next block in the received buffer
+            // move the pointer to the next block in the writeStream buffer
             inbuff_ptr += (DEFAULT_TX_BUFFER_LENGTH * 4);
  
         }

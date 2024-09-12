@@ -5,12 +5,21 @@ Transmits a tone at one quarter of the sample rate.
 """
 import sys
 import time
+import signal
 import numpy as np
 import argparse
 import SoapySDR
 from SoapySDR import *
 
 NUM_MTU = 8
+
+running = True
+
+def signal_handler(sig, frame):
+    global running
+    print('You pressed Ctrl+C!')
+    running = False
+
 
 def make_tone(n, make_float, fcen, fs, max_value, phi=0.285):
 
@@ -61,7 +70,6 @@ def main(cardno, serial, handle,
     SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Tone buffer length is {buff_len:,} words")
 
     sdr.setTimeSource("1pps_source_external")
-    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Time source set to '1pps_source_external'")
 
     if offset is None:
         offset = rate / 4
@@ -93,7 +101,7 @@ def main(cardno, serial, handle,
 
     last_underruns = 0
 
-    while True:
+    while running:
         try:
             rc = sdr.writeStream(tx_stream, [tx_buff], buff_len)
             if rc.ret != buff_len:
@@ -108,12 +116,12 @@ def main(cardno, serial, handle,
             print(". ", end='', flush=True)
             total_samps = 0
 
-        underruns = sdr.readStreamStatus(tx_stream)
-        if last_underruns != underruns.ret:
-            print(f"\nunderruns: {underruns.ret}")
-            last_underruns = underruns.ret
+            underruns = sdr.readStreamStatus(tx_stream)
+            if last_underruns != underruns.ret:
+                print(f"\nunderruns: {underruns.ret}")
+                last_underruns = underruns.ret
 
-    sdr.deactivateStream(tx_stream)
+    sdr.deactivateStream(tx_stream, SoapySDR.SOAPY_SDR_HAS_TIME)  
     sdr.closeStream(tx_stream)
 
 
@@ -136,7 +144,7 @@ def parse_command_line_arguments():
     parser.add_argument('-f', type=float, required=False, dest='freq',
                         default=1000e6, help='LO Frequency')
     parser.add_argument('--offset', type=float, required=False, dest='offset',
-                        default=2e6, help='Offset from LO')
+                        default=None, help='Offset from LO')
     parser.add_argument('-a', type=int, required=False, dest='attenuation',
                         default=0, help='TX attenuation')
     
@@ -145,6 +153,8 @@ def parse_command_line_arguments():
 
 if __name__ == '__main__':
     pars = parse_command_line_arguments()
+    signal.signal(signal.SIGINT, signal_handler)
+
 
     make_float = False
 
