@@ -938,7 +938,7 @@ int SoapySidekiq::readStreamStatus(SoapySDR::Stream *stream,
     }
 
     // if the total changed since last call indicate UNDERFLOW
-    if (this->tx_underruns > errors)
+    if (errors > this->tx_underruns)
     {
         this->tx_underruns = errors;
         return SOAPY_SDR_UNDERFLOW;
