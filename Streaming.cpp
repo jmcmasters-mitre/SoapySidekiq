@@ -508,7 +508,6 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         }
 
         p_tx_block_index = 0;
-        tx_underruns     = 0;
 
         //  tx block size
         status =
@@ -716,6 +715,8 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     {
         timeNs = convert_timestamp_to_nanos(block_ptr->sys_timestamp, sys_freq);
     }
+
+    flags = SOAPY_SDR_HAS_TIME;
 
     uint32_t block_num = 0;
     uint32_t num_blocks = numElems / rx_payload_size_in_words;
@@ -936,7 +937,17 @@ int SoapySidekiq::readStreamStatus(SoapySDR::Stream *stream,
         throw std::runtime_error("");
     }
 
-    return errors;
+    // if the total changed since last call indicate UNDERFLOW
+    if (this->tx_underruns > errors)
+    {
+        this->tx_underruns = errors;
+        return SOAPY_SDR_UNDERFLOW;
+    }
+    else
+    {
+        return 0;
+    }
+
 }
 
 

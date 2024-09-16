@@ -249,7 +249,7 @@ def parse_command_line_arguments():
     parser.add_argument('--tx-handle', type=int, required=False, dest='tx_handle',
                         default=0, help='Handle [0 or 1]')
     parser.add_argument('-r', type=float, required=False, dest='rate',
-                        default=40e6, help='Sample Rate')
+                        default=20e6, help='Sample Rate')
     parser.add_argument('-bw', type=float, required=False, dest='bw',
                         default=None, help='Bandwidth')
     parser.add_argument('-f', type=float, required=False, dest='freq',
