@@ -8,6 +8,58 @@
 #include <sidekiq_types.h>
 #include <unistd.h>
 
+/******************************************************************************/
+/** This is the custom logging handler.  If there were custom handling
+    required for logging messages, it should be handled here.
+
+    @param signum: the signal number that occurred
+    @return void
+*/
+void logging_handler( int32_t priority, const char *message )
+{
+    //printf("<PRIORITY %" PRIi32 "> custom logger: %s", priority, message);
+
+    char* new_message = (char *)malloc(strlen(message) + 1);
+    strcpy(new_message, message);
+
+    // remove newline and or cr 
+    size_t len = strlen(new_message);  // Get the length of the string
+                               
+    if (len > 0 && new_message[len - 1] == '\n') {
+        new_message[len - 1] = '\0';  // Replace newline with null terminator
+    }
+
+    len = strlen(new_message);  // Get the length of the string
+                            //
+    if (len > 0 && new_message[len - 1] == '\r') {
+        new_message[len - 1] = '\0';  // Replace newline with null terminator
+    }
+    
+    switch (priority)
+    {
+        case SKIQ_LOG_DEBUG:
+            SoapySDR_logf(SOAPY_SDR_DEBUG, "libsidekiq-log: %s", new_message);
+            break;
+
+        case SKIQ_LOG_INFO:
+            SoapySDR_logf(SOAPY_SDR_INFO, "libsidekiq-log: %s", new_message);
+            break;
+
+        case SKIQ_LOG_WARNING:
+            SoapySDR_logf(SOAPY_SDR_WARNING, "libsidekiq-log: %s", new_message);
+            break;
+
+        case SKIQ_LOG_ERROR:
+            SoapySDR_logf(SOAPY_SDR_ERROR, "libsidekiq-log: %s", new_message);
+            break;
+
+        default:
+            SoapySDR_logf(SOAPY_SDR_TRACE, "libsidekiq-log undefined %s", new_message);
+    }
+
+    free(new_message);
+}
+
 /*****************************************************************************/
   /** This is the callback function for once the data has completed being sent.
       There is no guarantee that the complete callback will be in the order that
@@ -69,11 +121,14 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     skiq_iq_order_t iq_order;
     int i;
 
+    /* Register our own logging function before initializing the library */
+    skiq_register_logging( logging_handler );
+   
+    SoapySDR::setLogLevel(SOAPY_SDR_WARNING); 
+    SoapySDR_logf(SOAPY_SDR_TRACE, "in constructor", card);
+
     /* We need to set some default parameters in case the user does not */
 
-    SoapySDR::setLogLevel(SOAPY_SDR_INFO);
-
-    SoapySDR_logf(SOAPY_SDR_TRACE, "in constructor", card);
 
     rxUseShort  = true;
     txUseShort  = true;

@@ -98,7 +98,9 @@ def main(cardno, rx_handle, rate, bw, freq):
 
     sdr = SoapySDR.Device(args)
 
+    # you can set your own desired logging level here, or leave it at WARNING
     SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
+
 
     # get the full scale value for this card
     rc = sdr.getNativeStreamFormat(SOAPY_SDR_RX, rx_handle)
