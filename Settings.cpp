@@ -38,23 +38,23 @@ void logging_handler( int32_t priority, const char *message )
     switch (priority)
     {
         case SKIQ_LOG_DEBUG:
-            SoapySDR_logf(SOAPY_SDR_DEBUG, "libsidekiq-log: %s", new_message);
+            SoapySDR_logf(SOAPY_SDR_DEBUG, "epiq-log: %s", new_message);
             break;
 
         case SKIQ_LOG_INFO:
-            SoapySDR_logf(SOAPY_SDR_INFO, "libsidekiq-log: %s", new_message);
+            SoapySDR_logf(SOAPY_SDR_INFO, "epiq-log: %s", new_message);
             break;
 
         case SKIQ_LOG_WARNING:
-            SoapySDR_logf(SOAPY_SDR_WARNING, "libsidekiq-log: %s", new_message);
+            SoapySDR_logf(SOAPY_SDR_WARNING, "epiq-log: %s", new_message);
             break;
 
         case SKIQ_LOG_ERROR:
-            SoapySDR_logf(SOAPY_SDR_ERROR, "libsidekiq-log: %s", new_message);
+            SoapySDR_logf(SOAPY_SDR_ERROR, "epiq-log: %s", new_message);
             break;
 
         default:
-            SoapySDR_logf(SOAPY_SDR_TRACE, "libsidekiq-log undefined %s", new_message);
+            SoapySDR_logf(SOAPY_SDR_TRACE, "epiq-log undefined %s", new_message);
     }
 
     free(new_message);
@@ -124,7 +124,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     /* Register our own logging function before initializing the library */
     skiq_register_logging( logging_handler );
    
-    SoapySDR::setLogLevel(SOAPY_SDR_WARNING); 
+    SoapySDR::setLogLevel(SOAPY_SDR_TRACE); 
     SoapySDR_logf(SOAPY_SDR_TRACE, "in constructor", card);
 
     /* We need to set some default parameters in case the user does not */
@@ -281,6 +281,8 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
 
     pthread_mutex_init(&space_avail_mutex, nullptr);
     pthread_cond_init(&space_avail_cond, nullptr);
+
+    SoapySDR_logf(SOAPY_SDR_TRACE, "leaving constructor", card);
 }
 
 // Destructor

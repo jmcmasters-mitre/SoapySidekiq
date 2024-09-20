@@ -98,8 +98,8 @@ def main(cardno, rx_handle, rate, bw, freq):
 
     sdr = SoapySDR.Device(args)
 
-    # you can set your own desired logging level here, or leave it at WARNING
-    SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
+    # you can set your own desired logging level here, or leave it at TRACE
+    SoapySDR.setLogLevel(SOAPY_SDR_INFO)
 
 
     # get the full scale value for this card
@@ -165,7 +165,7 @@ def main(cardno, rx_handle, rate, bw, freq):
     print("\n\n*** Note: using system timestamps means the expected timestamp may be off by 1 tick")
 
     # reset the timestamps to a very large number
-    sdr.setHardwareTime(172567433904834834, "now")
+    sdr.setHardwareTime(0, "now")
 
     # start the streaming
     sdr.activateStream(rx_stream)  
