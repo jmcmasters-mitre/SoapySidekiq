@@ -40,6 +40,9 @@ class SoapySidekiq : public SoapySDR::Device
 
         std::string getDriverKey(void) const;
 
+        std::string getHardwareKey(void) const;
+
+
         SoapySDR::Kwargs getHardwareInfo(void) const;
 
         /*******************************************************************

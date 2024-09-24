@@ -124,7 +124,6 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     /* Register our own logging function before initializing the library */
     skiq_register_logging( logging_handler );
    
-    SoapySDR::setLogLevel(SOAPY_SDR_TRACE); 
     SoapySDR_logf(SOAPY_SDR_TRACE, "in constructor", card);
 
     /* We need to set some default parameters in case the user does not */
@@ -308,6 +307,13 @@ std::string SoapySidekiq::getDriverKey(void) const
     SoapySDR_logf(SOAPY_SDR_TRACE, "getDriverKey");
     return "Sidekiq";
 }
+std::string SoapySidekiq::getHardwareKey(void) const
+{
+    SoapySDR_logf(SOAPY_SDR_TRACE, "getHardwareKey");
+    return part_str;
+}
+
+
 
 SoapySDR::Kwargs SoapySidekiq::getHardwareInfo(void) const
 {
@@ -1883,7 +1889,7 @@ void SoapySidekiq::setClockSource(const std::string &source)
     }
     else
     {
-        SoapySDR_logf(SOAPY_SDR_WARNING, "invalid ref_clock %s", source);
+        SoapySDR_logf(SOAPY_SDR_WARNING, "invalid ref_clock %s", source.c_str());
     }
 
     status = skiq_write_ref_clock_select(card, ref_clock);

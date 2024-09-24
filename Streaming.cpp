@@ -366,6 +366,15 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
             setFrequency(SOAPY_SDR_TX, rx_hdl, DEFAULT_FREQUENCY);
         }
 
+        status = skiq_read_sys_timestamp_freq(this->card, &this->sys_freq);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                          "skiq_read_sys_timestamp_freq failed: (card %d), status %d",
+                           card, status);
+            throw std::runtime_error("");
+        }
+        
         return TX_STREAM;
     }
     else
