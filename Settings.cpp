@@ -169,6 +169,16 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         throw std::runtime_error("");
     }
 
+    if (args.count("tx_block_size") != 0)
+    {
+        current_tx_block_size = std::stoi(args.at("tx_block_size"));
+    }
+    else
+    {
+        current_tx_block_size = DEFAULT_TX_BUFFER_LENGTH;
+    }
+    SoapySDR_logf(SOAPY_SDR_INFO, "TX block size set to %u", current_tx_block_size);
+
     rx_hdl = skiq_rx_hdl_A1;
     tx_hdl = skiq_tx_hdl_A1;
 
@@ -1901,7 +1911,7 @@ void SoapySidekiq::setClockSource(const std::string &source)
         throw std::runtime_error("");
     }
 
-    SoapySDR_logf(SOAPY_SDR_INFO, "ref_clock set to %s", source);
+    SoapySDR_logf(SOAPY_SDR_INFO, "ref_clock set to %s", source.c_str());
     return;
 }
 

@@ -274,6 +274,7 @@ class SoapySidekiq : public SoapySDR::Device
         uint32_t tx_bandwidth{};
         uint32_t tx_underruns{};
         uint32_t complete_count{};
+        uint32_t current_tx_block_size{};
 
         //  setting
         bool iq_swap{};
@@ -297,7 +298,9 @@ class SoapySidekiq : public SoapySDR::Device
         // The registration requires a static function instead of a method so
         // this must be created to be able to register it.
         // This function calls the tx_complete method.
-        static void static_tx_complete_callback(int32_t status, skiq_tx_block_t *p_data, void *p_user)
+        static void static_tx_complete_callback(int32_t status, 
+                                                skiq_tx_block_t *p_data, 
+                                                void *p_user)
         {
             // cast the passed in void pointer to the structure that was passed.
             passedStruct  *instance = static_cast<passedStruct*>(p_user);

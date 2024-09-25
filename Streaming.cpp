@@ -80,7 +80,7 @@ SoapySDR::ArgInfoList SoapySidekiq::getStreamArgsInfo(
         bufflenArg.name        = "Buffer Sample Count";
         bufflenArg.description = "Number of IQ samples per buffer.";
         bufflenArg.units       = "(int16_t * 2) samples";
-        bufflenArg.value       = std::to_string(DEFAULT_TX_BUFFER_LENGTH);
+        bufflenArg.value       = std::to_string(current_tx_block_size);
         bufflenArg.type        = SoapySDR::ArgInfo::INT;
 
         streamArgs.push_back(bufflenArg);
@@ -343,7 +343,7 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
         // Allocate buffers
         for (int i = 0; i < DEFAULT_NUM_BUFFERS; i++)
         {
-            p_tx_block[i] = skiq_tx_block_allocate(DEFAULT_TX_BUFFER_LENGTH);
+            p_tx_block[i] = skiq_tx_block_allocate(current_tx_block_size);
         }
         currTXBuffIndex = 0;
 
@@ -413,7 +413,7 @@ size_t SoapySidekiq::getStreamMTU(SoapySDR::Stream *stream) const
     }
     else if (stream == TX_STREAM)
     {
-        return DEFAULT_TX_BUFFER_LENGTH;
+        return current_tx_block_size;
     }
     else
     {
@@ -520,7 +520,7 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
 
         //  tx block size
         status =
-            skiq_write_tx_block_size(card, tx_hdl, DEFAULT_TX_BUFFER_LENGTH);
+            skiq_write_tx_block_size(card, tx_hdl, current_tx_block_size);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
@@ -528,7 +528,7 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
                           card, status);
             throw std::runtime_error("");
         }
-        SoapySDR_logf(SOAPY_SDR_INFO, "TX block size is: %u", DEFAULT_TX_BUFFER_LENGTH);
+        SoapySDR_logf(SOAPY_SDR_INFO, "TX block size is: %u", current_tx_block_size);
 
         //  tx data flow mode
         status = skiq_write_tx_data_flow_mode(card, tx_hdl,
@@ -799,23 +799,23 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
         return SOAPY_SDR_NOT_SUPPORTED;
     }
 
-    if (numElems % DEFAULT_TX_BUFFER_LENGTH != 0)
+    if (numElems % current_tx_block_size != 0)
     {
         SoapySDR_logf(SOAPY_SDR_ERROR, "numElems must be a multiple of the TX MTU size "
                      " numElems %d, block size %u",
-                     numElems, DEFAULT_TX_BUFFER_LENGTH);
+                     numElems, current_tx_block_size);
         throw std::runtime_error("");
     }
 
     // Pointer to the location in the input buffer to transmit from
     char *inbuff_ptr = (char *)(buffs[0]);
 
-    uint32_t num_blocks = numElems / DEFAULT_TX_BUFFER_LENGTH;
+    uint32_t num_blocks = numElems / current_tx_block_size;
 
     uint32_t curr_block = 0;
 
     // total number of bytes that need to be transmitted in this call
-    uint32_t tx_block_bytes = DEFAULT_TX_BUFFER_LENGTH * 4;
+    uint32_t tx_block_bytes = current_tx_block_size * 4;
 
     while (curr_block < num_blocks)
     {
@@ -833,7 +833,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
         {
             // float
             float *  float_inbuff = (float *)inbuff_ptr;
-            uint32_t words_left = DEFAULT_TX_BUFFER_LENGTH;
+            uint32_t words_left = current_tx_block_size;
             uint16_t * new_outbuff = (uint16_t *)outbuff_ptr;
 
             int short_ctr = 0;
@@ -912,7 +912,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             currTXBuffIndex = (currTXBuffIndex + 1) % DEFAULT_NUM_BUFFERS;
 
             // move the pointer to the next block in the writeStream buffer
-            inbuff_ptr += (DEFAULT_TX_BUFFER_LENGTH * 4);
+            inbuff_ptr += (current_tx_block_size * 4);
  
         }
 

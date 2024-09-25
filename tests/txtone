@@ -43,15 +43,14 @@ def main(cardno, serial, handle,
          rate, bw, freq, 
          attenuation, make_float, offset):
 
-    if serial is None:
-        args = dict(card = cardno)
-    else:
-        args = dict(serial = '8N55')
-
-    sdr = SoapySDR.Device(args)
-
     SoapySDR.setLogLevel(SOAPY_SDR_TRACE)
-#    SoapySDR.setLogLevel(SOAPY_SDR_ERROR)
+
+    if serial is None:
+        sdr = SoapySDR.Device({"card": cardno,
+                               "tx_block_size": "16380"})
+    else:
+        sdr = SoapySDR.Device({"serial": serial,
+                               "tx_block_size": "16380"})
 
     # get the full scale value for making the tone.
     rc = sdr.getNativeStreamFormat(SOAPY_SDR_TX, handle)
@@ -90,7 +89,7 @@ def main(cardno, serial, handle,
 
     tx_buff = make_tone(buff_len, make_float, offset, rate, fullscale)
 
-    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Tone buffer length is {buff_len:,} words")
+    SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, f"Tone buffer length is {buff_len:,} samples")
 
     sdr.activateStream(tx_stream)  # this turns the radio on
 
