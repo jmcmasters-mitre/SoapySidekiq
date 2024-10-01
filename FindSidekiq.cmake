@@ -22,9 +22,12 @@ if(NOT Sidekiq_FOUND)
     if(${outVar} MATCHES "x86_64")
         set (libname  "libsidekiq__x86_64.gcc.a")
         set (otherlib "none")
+    elseif(PLATFORM STREQUAL "msiq-x40")
+        set(otherlib "none")
+        set(libname  "libsidekiq__msiq-x40.a")
     else()
         set(libname  "libsidekiq__aarch64.gcc6.3.a")
-        set(otherlib "libiio.so")
+        set(otherlib "libiio")
     endif()
 
     message(STATUS "library is ${libname} ")
@@ -33,13 +36,13 @@ if(NOT Sidekiq_FOUND)
     find_library(Sidekiq_LIBRARY
         NAMES ${libname}
         HINTS ${Sidekiq_PKG_LIBRARY_DIRS} $ENV{Sidekiq_DIR}/include
-        PATHS ~/sidekiq_sdk_current/lib/ /usr/local/lib /usr/lib /opt/lib /opt/local/lib)
-
+        PATHS ~/sidekiq_sdk_current/lib/)
 
     set(Sidekiq_LIBRARIES ${Sidekiq_LIBRARY})
     set(Sidekiq_INCLUDE_DIRS ${Sidekiq_INCLUDE_DIR})
 
     if(${otherlib} MATCHES "libiio.so")
+    	message(STATUS "building for z3u")
         find_library(OTHER_LIBS
             NAMES ${otherlib}
             HINTS ${Sidekiq_PKG_LIBRARY_DIRS} $ENV{Sidekiq_DIR}/include
@@ -53,15 +56,61 @@ if(NOT Sidekiq_FOUND)
         find_package_handle_standard_args(Sidekiq  DEFAULT_MSG
             Sidekiq_LIBRARY Sidekiq_INCLUDE_DIR OTHER_LIBS)
 
-        mark_as_advanced(Sidekiq_INCLUDE_DIR Sidekiq_LIBRARY OTHER_LIBS) 
-    else()
+    	set(PKGCONFIG_LIBS "")
+
+        mark_as_advanced(Sidekiq_INCLUDE_DIRS Sidekiq_LIBRARIES OTHER_LIBS PKGCONFIG_LIBS) 
+    elseif(PLATFORM STREQUAL "msiq-x40")
+    	message(STATUS "building for x40")
+
+	# Get home directory
+        get_filename_component(HOME_DIR "$ENV{HOME}" ABSOLUTE)
+
+        # Set the PKG_CONFIG_PATH using the home directory
+        set(ENV{PKG_CONFIG_PATH} "${HOME_DIR}/sidekiq_sdk_current/lib/support/msiq-x40/usr/lib/epiq/pkgconfig")
+
+	message(STATUS "PKG_CONFIG_PATH $ENV{PKG_CONFIG_PATH}")
+
+        execute_process( 
+	    COMMAND pkg-config --libs-only-l grpc++ protobuf
+	    OUTPUT_VARIABLE PKG_LIBS
+	    OUTPUT_STRIP_TRAILING_WHITESPACE
+	)
+	
+        # Convert PKG_LIBS into a list
+        string(REPLACE " " ";" PKG_LIBS_LIST ${PKG_LIBS})
+
+	set (PKGCONFIG_LIBS ${PKG_LIBS_LIST} -lgpiod -lstdc++)
+	message(STATUS "PKGCONFIG ${PKGCONFIG_LIBS}")
+
+	execute_process(
+	    COMMAND pkg-config --variable=libdir protobuf
+	    OUTPUT_VARIABLE LIB_PATH
+	    OUTPUT_STRIP_TRAILING_WHITESPACE
+	)
+
+	message(STATUS "LIB_PATH ${LIB_PATH}")
+	link_directories(${LIB_PATH})
+
         include(FindPackageHandleStandardArgs)
         # handle the QUIETLY and REQUIRED arguments and set LibSidekiq_FOUND to TRUE
         # if all listed variables are TRUE
         find_package_handle_standard_args(Sidekiq  DEFAULT_MSG
             Sidekiq_LIBRARY Sidekiq_INCLUDE_DIR )
 
-        mark_as_advanced(Sidekiq_INCLUDE_DIR Sidekiq_LIBRARY ) 
+    	set(OTHER_LIBS "")
+
+        mark_as_advanced(Sidekiq_INCLUDE_DIRS Sidekiq_LIBRARIES OTHER_LIBS PKGCONFIG_LIBS) 
+    else()
+    	message(STATUS "building for x86")
+        include(FindPackageHandleStandardArgs)
+        # handle the QUIETLY and REQUIRED arguments and set LibSidekiq_FOUND to TRUE
+        # if all listed variables are TRUE
+        find_package_handle_standard_args(Sidekiq  DEFAULT_MSG
+            Sidekiq_LIBRARY Sidekiq_INCLUDE_DIR )
+
+        set(OTHER_LIBS "")
+	set(PKGCONFIG_LIBS "")
+        mark_as_advanced(Sidekiq_INCLUDE_DIRS Sidekiq_LIBRARIES OTHER_LIBS PKGCONFIG_LIBS) 
     endif()
 
 endif(NOT Sidekiq_FOUND)

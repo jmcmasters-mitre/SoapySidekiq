@@ -18,6 +18,7 @@ endif ()
 message(STATUS "Sidekiq_INCLUDE_DIRS - ${Sidekiq_INCLUDE_DIRS}")
 message(STATUS "Sidekiq_LIBRARIES - ${Sidekiq_LIBRARIES}")
 message(STATUS "OTHER_LIBS - ${OTHER_LIBS}")
+message(STATUS "PKGCONFIG_LIBS - ${PKGCONFIG_LIBS}")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${Sidekiq_INCLUDE_DIRS})
@@ -59,8 +60,10 @@ SOAPY_SDR_MODULE_UTIL(
     LIBRARIES
         ${Sidekiq_LIBRARIES}
         ${OTHER_LIBS}
+	${PKGCONFIG_LIBS}
         /usr/lib/epiq/libusb-1.0.so
         /usr/lib/epiq/libglib-2.0.so
-        /usr/lib/epiq/libtirpc.so
         -lrt
+        /usr/lib/epiq/libtirpc.so
+
 )
