@@ -1,5 +1,3 @@
-//  Copyright [2018] <Alexander Hurd>"
-
 #include "SoapySidekiq.hpp"
 
 std::vector<std::string> SoapySidekiq::listSensors(void) const
@@ -8,22 +6,15 @@ std::vector<std::string> SoapySidekiq::listSensors(void) const
     SoapySDR_logf(SOAPY_SDR_TRACE, "listSensors");
 
     sensors.push_back("temperature");
-    sensors.push_back("acceleration");
+    sensors.push_back("accelerometer");
 
     return sensors;
-}
-
-SoapySDR::ArgInfo SoapySidekiq::getSensorInfo(const std::string &key) const
-{
-    SoapySDR_logf(SOAPY_SDR_TRACE, "getSensorInfo, key %s", key.c_str());
-
-    return SoapySDR::Device::getSensorInfo(key);
 }
 
 std::string SoapySidekiq::readSensor(const std::string &key) const
 {
     int status = 0;
-    SoapySDR_logf(SOAPY_SDR_TRACE, "readSensor, key: '%s'", key.c_str());
+    SoapySDR_logf(SOAPY_SDR_TRACE, "readSensor");
 
     if (key.compare("temperature") == 0)
     {
@@ -44,21 +35,21 @@ std::string SoapySidekiq::readSensor(const std::string &key) const
     }
     bool supported = false;
 
-    if (key.compare("acceleration")== 0)
+    if (key.compare("accelerometer") == 0)
     {
         status = skiq_is_accel_supported(card, &supported);
         if (status != 0)
         {
             SoapySDR_logf(
                 SOAPY_SDR_ERROR,
-                "Failure: skiq-is_accel_supported (card %i), status %d", card,
+                "Failure: skiq-is_accel_supported (card %u), status %d", card,
                 status);
         }
 
         if (!supported)
         {
             SoapySDR_logf(SOAPY_SDR_WARNING,
-                          "Acceleration not supported by card %i, status %d",
+                          "Accelerometer not supported by card %u, status %d",
                           card, status);
             return "{}";
         }
@@ -98,7 +89,7 @@ std::string SoapySidekiq::readSensor(const std::string &key) const
         };
         std::stringstream ss;
         ss << "{\"x\":" << x_data << " \"y\":" << y_data << " \"z\":" << z_data
-           << "}"; //  json format
+           << "}";   
 
         SoapySDR_logf(SOAPY_SDR_DEBUG, "accel data %s", (ss.str().c_str()));
         return ss.str();
@@ -108,15 +99,3 @@ std::string SoapySidekiq::readSensor(const std::string &key) const
     return SoapySDR::Device::readSensor(key);
 }
 
-std::vector<std::string> SoapySidekiq::listSensors(const int    direction,
-                                                   const size_t channel) const
-{
-    SoapySDR_logf(SOAPY_SDR_TRACE, "listSensors2");
-    return SoapySDR::Device::listSensors(direction, channel);
-}
-std::string SoapySidekiq::readSensor(const int direction, const size_t channel,
-                                     const std::string &key) const
-{
-    SoapySDR_logf(SOAPY_SDR_TRACE, "read_sensor2");
-    return SoapySDR::Device::readSensor(direction, channel, key);
-}
