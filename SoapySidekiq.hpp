@@ -1,5 +1,3 @@
-//  Copyright [2018] <Alexander Hurd>"
-
 #pragma once
 
 #include <sidekiq_api.h>
