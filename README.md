@@ -4,15 +4,17 @@
 # Building for non-X40 cards:
 Use the normal build process for cmake projects:
 
-\$ mkdir build
+```
+$ mkdir build
 
-\$ cd build
+$ cd build
 
-\$ cmake ../
+$ cmake ../
 
-\$ make -j8
+$ make -j8
 
-\$ sudo make install
+$ sudo make install
+```
 
 
 # Building for the X40:
@@ -25,18 +27,26 @@ So when building the **SoapySDR** repo we need to explicitly call out the paths 
 
 So we need to run:
 
+```
 $ cmake .. -DPython3_EXECUTABLE=/usr/bin/python3.8 -DPython3_INCLUDE_DIR=/usr/include/python3.8 -DPython3_LIBRARY=/usr/lib/aarch64-linux-gnu/libpython3.8.so
+```
 
 We also need to make sure PYTHONPATH and LD_LIBRARY_PATH are set correctly:
 
-```$ export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib/epiq:/usr/lib/epiq:$LD_LIBRARY_PATH"```
+```
+$ export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib/epiq:/usr/lib/epiq:$LD_LIBRARY_PATH"
+```
 
-```$ export PYTHONPATH="/usr/local/lib/python3.8/site-packages$PYTHONPATH"```
+```
+$ export PYTHONPATH="/usr/local/lib/python3.8/site-packages$PYTHONPATH"
+```
 
 The **SoapySidekiq** repo also needs to be build differently:
 
 ## Building SoapySidekiq
-\$ cmake ../ -DPLATFORM="msiq-x40"
+```
+$ cmake ../ -DPLATFORM="msiq-x40"
+```
 
 For all other cards, the normal cmake is sufficient.
 
