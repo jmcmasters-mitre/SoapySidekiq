@@ -626,7 +626,6 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
 
                     // 195 to 255 [0 to 30 dB (Rx1/Rx2), 0.5 dB/step]
                 case skiq_x4:
-                case skiq_x40:
                 case skiq_x2:
                     if ((value < 0) || (value > 30))
                     {
@@ -712,7 +711,6 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
 
             // 0 to 167 [0 to 41.75 dB, 0.25 dB/step]
             case skiq_x4:
-            case skiq_x40:
             case skiq_x2:
             case skiq_nv100:
                 if ((value < 0) || (value > 41.75))
@@ -787,7 +785,6 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
             // 195 to 255 [0 to 30 dB, 0.5 dB/step]
             case skiq_x2:
             case skiq_x4:
-            case skiq_x40:
                 return static_cast<double>((gain_index - 195) / 2);
                 break;
 
@@ -829,7 +826,6 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
 
             // 0 to 167 [0 to 41.75 dB, 0.25 dB/step]
             case skiq_x4:
-            case skiq_x40:
             case skiq_x2:
             case skiq_nv100:
                 return static_cast<int>(attenuation_index / 4);
@@ -878,7 +874,6 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
             // 195 to 255 [0 to 30 dB, 0.5 dB/step]
             case skiq_x2:
             case skiq_x4:
-            case skiq_x40:
                 gain_min = 0;
                 gain_max = 30;
                 break;
@@ -916,7 +911,6 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
 
             case skiq_x2:
             case skiq_x4:
-            case skiq_x40:
             case skiq_nv100:
                 attenuation_max = 41.75;
                 break;

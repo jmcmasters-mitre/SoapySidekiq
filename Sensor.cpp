@@ -20,30 +20,19 @@ std::string SoapySidekiq::readSensor(const std::string &key) const
     {
         int8_t temp = 0;
 
-        if (part != skiq_x40)
+        status = skiq_read_temp(card, &temp);
+        if (status != 0)
         {
-            status = skiq_read_temp(card, &temp);
-            if (status != 0)
-            {
-                SoapySDR_logf(SOAPY_SDR_ERROR,
-                              "Failure: skiq_read_temp (card %i), status %d", card,
-                              status);
-            }
-            else
-            {
-                SoapySDR_logf(SOAPY_SDR_DEBUG, "Temp is %d", temp);
-            }
-
-            return std::to_string(temp);
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                          "Failure: skiq_read_temp (card %i), status %d", card,
+                          status);
         }
         else
         {
-
-            SoapySDR_logf(SOAPY_SDR_WARNING,
-                          "temp sensor not supported by card %u",
-                          card, status);
-            return "{}";
+            SoapySDR_logf(SOAPY_SDR_DEBUG, "Temp is %d", temp);
         }
+
+        return std::to_string(temp);
     }
     bool supported = false;
 
