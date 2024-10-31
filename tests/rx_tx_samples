@@ -23,12 +23,18 @@ def signal_handler(sig, frame):
     running = False
 
 
-def transmit(sdr, tx_stream, buff_len, tx_buff, rate):
+def transmit(sdr, tx_stream, pps, buff_len, tx_buff, rate):
     global running, tx_total_samps, tx_total_blocks
     SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"in transmit")
 
     print(f"tx buff len: {buff_len}")
-    sdr.activateStream(tx_stream)  # this turns the radio on
+
+    if pps:
+        sdr.activateStream(tx_stream, SoapySDR.SOAPY_SDR_HAS_TIME)
+        SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"activated transmit stream for 1pps")
+    else:
+        sdr.activateStream(tx_stream)  
+        SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"activated transmit stream no 1pps")
 
     last_underruns = 0
 
@@ -58,12 +64,17 @@ def transmit(sdr, tx_stream, buff_len, tx_buff, rate):
     SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"leaving transmit")
 
 
-def receive(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name):
+def receive(sdr, rx_stream, pps, num_blocks, buff_len, rx_buff, file_name):
     global running, rx_total_samps, rx_total_blocks, tx_total_blocks
 
-    SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"in receive")
+    SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"in receive thread")
 
-    sdr.activateStream(rx_stream)  # this turns the radio on
+    if pps:
+        sdr.activateStream(rx_stream, SoapySDR.SOAPY_SDR_HAS_TIME)
+        SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"activated receive stream for 1pps")
+    else:
+        sdr.activateStream(rx_stream)  
+        SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"activated receive stream no 1pps")
     
     for idx in range(num_blocks):
         if not running:
@@ -124,7 +135,8 @@ def main(cardno, serial,
          rx_handle, tx_handle, 
          rate, bw, freq, 
          gain, num_blocks, file_name,
-         offset, attenuation):
+         offset, attenuation,
+         pps):
     global running, rx_total_samps, tx_total_samps, rx_total_blocks, tx_total_blocks
 
     if serial is None:
@@ -204,8 +216,9 @@ def main(cardno, serial,
     else:
         sdr.setGain(SOAPY_SDR_TX, tx_handle, float(0))
 
-    transmit_thread = threading.Thread(target=transmit, name='transmit',args=(sdr,tx_stream,tx_buff_len,tx_buff,rate, ))
-    receive_thread = threading.Thread(target=receive, name='receive',args=(sdr,rx_stream,num_blocks,rx_buff_len,rx_buff,file_name, ))
+    receive_thread = threading.Thread(target=receive, name='receive',args=(sdr,rx_stream,pps,num_blocks,rx_buff_len,rx_buff,file_name, ))
+
+    transmit_thread = threading.Thread(target=transmit, name='transmit',args=(sdr,tx_stream,pps,tx_buff_len,tx_buff,rate, ))
 
     transmit_thread.start()
     receive_thread.start()
@@ -264,6 +277,9 @@ def parse_command_line_arguments():
                         default=2e6, help='Offset from LO')
     parser.add_argument('-a', type=int, required=False, dest='attenuation',
                         default=0, help='TX attenuation')
+    parser.add_argument('--pps', type=bool, required=False, dest='pps',
+                        default=False, help='pps mode')
+
 
     
     return parser.parse_args(sys.argv[1:])
@@ -286,4 +302,5 @@ if __name__ == '__main__':
         pars.num_blocks,
         pars.dest,
         pars.offset,
-        pars.attenuation) 
+        pars.attenuation,
+        pars.pps) 

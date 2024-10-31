@@ -499,6 +499,10 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
                 throw std::runtime_error("");
             }
         }
+        SoapySDR_logf(SOAPY_SDR_INFO,
+                      "started receive streaming on handle: %u",
+                      rx_hdl);
+                    
     }
     else if (stream == TX_STREAM)
     {
@@ -588,6 +592,9 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
             }
             SoapySDR_logf(SOAPY_SDR_INFO, "TX start streaming");
         }
+        SoapySDR_logf(SOAPY_SDR_INFO,
+                      "started transmit streaming on handle: %u",
+                      tx_hdl);
     }
 
     return 0;
