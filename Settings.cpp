@@ -196,6 +196,16 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         throw std::runtime_error("");
     }
 
+    status = skiq_write_chan_mode(card, skiq_chan_mode_single);
+    if (status != 0)
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_write_chan_mode failed, card %u, status %d",
+                      card, status);
+        throw std::runtime_error("");
+    }
+    SoapySDR_logf(SOAPY_SDR_TRACE, "channel mode set to single");
+
+
     status = skiq_read_parameters(card, &this->param);
     if (status != 0)
     {
@@ -592,7 +602,7 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
                            const double value)
 {
     int status;
-    int gain_index = 0;
+    uint8_t gain_index = 0;
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "setGain");
 
@@ -621,7 +631,7 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
                         return;
                     }
 
-                    gain_index = static_cast<int>(value);
+                    gain_index = (uint8_t)static_cast<int>(value);
                     break;
 
                     // 195 to 255 [0 to 30 dB (Rx1/Rx2), 0.5 dB/step]
@@ -636,7 +646,7 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
                         return;
                     }
 
-                    gain_index = 195 + (static_cast<int>(value) * 2);
+                    gain_index = (uint8_t)(195 + (static_cast<int>(value) * 2));
                     break;
 
 
@@ -651,7 +661,7 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
                         return;
                     }
 
-                    gain_index = 187 + (static_cast<int>(value) * 2);
+                    gain_index = (uint8_t)(187 + (static_cast<int>(value) * 2));
                     break;
 
                 default:
@@ -670,7 +680,7 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
                     card, gain, status);
                     throw std::runtime_error("");
             }
-            SoapySDR_logf(SOAPY_SDR_INFO, "Setting rx gain to: %2.0f dB, gain index: %d",
+            SoapySDR_logf(SOAPY_SDR_INFO, "Setting rx gain to: %2.0f dB, gain index: %u",
                           value, gain_index);
         }
         else
@@ -686,7 +696,7 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
     else if (direction == SOAPY_SDR_TX)
     {
 
-        int attenuation_index = 0;
+        uint16_t attenuation_index = 0;
 
         // convert value from dB to index based upon the card type
         switch (part)
@@ -706,7 +716,7 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
                     return;
                 }
 
-                attenuation_index = static_cast<int>(value * 4);
+                attenuation_index = (uint16_t)static_cast<int>(value * 4);
                 break;
 
             // 0 to 167 [0 to 41.75 dB, 0.25 dB/step]
@@ -722,7 +732,7 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
                     return;
                 }
 
-                attenuation_index = static_cast<int>(value * 4);
+                attenuation_index = (uint16_t)static_cast<int>(value * 4);
                 break;
 
             default:
@@ -756,12 +766,12 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
 {
     int status = 0;
 
-    SoapySDR_logf(SOAPY_SDR_TRACE, "getGain");
+    SoapySDR_logf(SOAPY_SDR_TRACE, "getGain, ");
 
     if (direction == SOAPY_SDR_RX)
     {
         uint8_t gain_index;
-        status = skiq_read_rx_gain(card, this->rx_hdl, &gain_index);
+        status = skiq_read_rx_gain((uint8_t)card, (skiq_rx_hdl_t)this->rx_hdl, &gain_index);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
