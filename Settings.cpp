@@ -145,30 +145,6 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
 
     rx_running = false;
 
-    if (args.count("card") != 0)
-    {
-        try
-        {
-            card = std::stoi(args.at("card"));
-            serial = args.at("serial");
-        }
-
-        catch (const std::invalid_argument &)
-        {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "requested card (%u), not found",
-                          std::stoi(args.at("card")));
-            throw std::runtime_error("");
-        }
-
-        SoapySDR_logf(SOAPY_SDR_INFO, "found Sidekiq Device 'card' = %u, 'serial' = %s",
-                      card, serial.c_str());
-    }
-    else
-    {
-        SoapySDR_logf(SOAPY_SDR_ERROR, "no cards found");
-        throw std::runtime_error("");
-    }
-
     if (args.count("tx_block_size") != 0)
     {
         current_tx_block_size = std::stoi(args.at("tx_block_size"));
@@ -692,11 +668,12 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
         }
     }
 
-    /* For TX gain is attenuation */
+    /* For TX gain is attenuation 
+     * so a gain of 0 is max attenuation_index. A large gain, is a smaller attenuation index */
     else if (direction == SOAPY_SDR_TX)
     {
-
         uint16_t attenuation_index = 0;
+        uint32_t max_attenuation_index = this->param.tx_param[tx_hdl].atten_quarter_db_max;
 
         // convert value from dB to index based upon the card type
         switch (part)
@@ -716,7 +693,8 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
                     return;
                 }
 
-                attenuation_index = (uint16_t)static_cast<int>(value * 4);
+                attenuation_index = max_attenuation_index - 
+                                        (uint16_t)static_cast<int>(value * 4);
                 break;
 
             // 0 to 167 [0 to 41.75 dB, 0.25 dB/step]
@@ -732,7 +710,8 @@ void SoapySidekiq::setGain(const int direction, const size_t channel,
                     return;
                 }
 
-                attenuation_index = (uint16_t)static_cast<int>(value * 4);
+                attenuation_index = max_attenuation_index - 
+                                        (uint16_t)static_cast<int>(value * 4);
                 break;
 
             default:
@@ -813,6 +792,8 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
     else if (direction == SOAPY_SDR_TX)
     {
         uint16_t attenuation_index = 0;
+        uint32_t max_attenuation_index = this->param.tx_param[tx_hdl].atten_quarter_db_max;
+
         status = skiq_read_tx_attenuation(card, tx_hdl, &attenuation_index);
         if (status != 0)
         {
@@ -831,13 +812,14 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
             case skiq_m2_2280:
             case skiq_z2:
             case skiq_z3u:
-                return static_cast<int>(attenuation_index / 4);
+                return (max_attenuation_index - static_cast<int>(attenuation_index) / 4);
                 break;
 
             // 0 to 167 [0 to 41.75 dB, 0.25 dB/step]
             case skiq_x4:
             case skiq_x2:
             case skiq_nv100:
+                return (max_attenuation_index - static_cast<int>(attenuation_index) / 4);
                 return static_cast<int>(attenuation_index / 4);
                 break;
 

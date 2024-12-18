@@ -95,6 +95,20 @@ SoapySDR::ArgInfoList SoapySidekiq::getStreamArgsInfo(
 
 void SoapySidekiq::rx_receive_operation(void)
 {
+    try
+    {
+        rx_receive_operation_impl();
+        SoapySDR_log(SOAPY_SDR_INFO, "Exiting RX Sidekiq Thread");
+    }
+    catch (const std::exception&)
+    {
+        SoapySDR_log(SOAPY_SDR_WARNING, "Exiting RX Sidekiq Thread due to error");
+        rx_receive_operation_exited_due_to_error = true;
+    }
+
+}
+void SoapySidekiq::rx_receive_operation_impl(void)
+{
     int status = 0;
 
 
@@ -683,6 +697,10 @@ int SoapySidekiq::readStream(SoapySDR::Stream *stream, void *const *buffs,
     if (stream != RX_STREAM)
     {
         return SOAPY_SDR_NOT_SUPPORTED;
+    }
+    else if (rx_receive_operation_exited_due_to_error)
+    {
+        return SOAPY_SDR_STREAM_ERROR;
     }
 
     if (numElems % rx_payload_size_in_words != 0)

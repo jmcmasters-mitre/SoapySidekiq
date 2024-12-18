@@ -247,6 +247,7 @@ class SoapySidekiq : public SoapySDR::Device
         std::condition_variable _cv;
         std::basic_string<char> timetype{};
         static bool rx_running;
+        bool rx_receive_operation_exited_due_to_error{};
 
         uint8_t num_rx_channels{};
         skiq_rx_hdl_t rx_hdl{};
@@ -326,6 +327,7 @@ class SoapySidekiq : public SoapySDR::Device
         //  receive thread
         std::thread _rx_receive_thread;
         void rx_receive_operation(void);
+        void rx_receive_operation_impl(void);
         static std::vector<SoapySDR::Kwargs> sidekiq_devices;
 
         // tx callback method
