@@ -87,6 +87,7 @@ static std::vector<SoapySDR::Kwargs> findSidekiq(const SoapySDR::Kwargs &args)
             SoapySDR_logf(SOAPY_SDR_INFO, "Found device by serial %s",
                           args.at("serial").c_str());
         }
+
         results.push_back(SoapySidekiq::sidekiq_devices[i]);
     }
 

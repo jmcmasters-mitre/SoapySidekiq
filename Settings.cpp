@@ -145,6 +145,23 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
 
     rx_running = false;
 
+    if (args.count("card") != 0)
+    {
+        try
+        {
+            card = std::stoi(args.at("card"));
+        }
+        catch (const std::invalid_argument &)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR, "Requested card (%d), not found", std::stoi(args.at("card")));
+        }
+    }
+    else
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "No cards found");
+        throw std::runtime_error("");
+    }
+
     if (args.count("tx_block_size") != 0)
     {
         current_tx_block_size = std::stoi(args.at("tx_block_size"));
