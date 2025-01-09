@@ -33,16 +33,18 @@ recordId = 0
 sample_queue = []
 
 def getBlocks(N, rx_stream):
-    global running, sample_queue, max_qsize, getBlockId, idx
+    global running, sample_queue, max_qsize, getBlockId, write_idx
 
     getBlockId = threading.get_native_id()
-    idx = 0
+    write_idx = 0
+
     while running:
         if DEBUG:
             print("getBlock", idx)
 
         buff = np.empty(2*N, dtype=np.int16)
-        sr = sdr.readStream(rx_stream, [buff], N)
+#        sr = sdr.readStream(rx_stream, [buff], N)
+        sr = sdr.readStream(rx_stream, [buff], N, timeoutUs=200000)
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
 
@@ -52,25 +54,25 @@ def getBlocks(N, rx_stream):
         if curr_qsize > max_qsize:
             max_qsize = curr_qsize
 
-        idx += 1
+        write_idx += 1
 
 def recordBlocks(fp):
-    global running, sample_queue, recordId, index
+    global running, sample_queue, recordId, read_idx
 
     recordId = threading.get_native_id()
-    index = 0;
+    read_idx = 0;
     while running:
         while len(sample_queue):
             if DEBUG:
                 print("recordBlocks", len(sample_queue))
 
             block = sample_queue.pop(0)
-            if index  == 0:
+            if read_idx  == 0:
                 print(block)
 
             fp.write(block)
-            index += 1
-        time.sleep(1/1000)
+            read_idx += 1
+        time.sleep(2/1000)
 
 def signal_handler(sig, frame):
     global running
@@ -103,7 +105,7 @@ def main(cardno, rx_chan, fs, bw, freq):
 
     # create a re-usable buffer for receiving samples
     N = sdr.getStreamMTU(rx_stream)
-    N = 6*N
+    N = 2*N
     print("Stream MTU",  N)
 
 
@@ -121,10 +123,15 @@ def main(cardno, rx_chan, fs, bw, freq):
 
 
     path = "/home/dave/SoapySidekiq/tests/samples.bin"
+
+    time_ctr = 0
     while running:
+        time.sleep(3)
+        time_ctr += 3
         try:
             file_size = os.path.getsize(path)
-            print(f"file size {file_size}, max_qsize: {max_qsize}, getindex: {idx}, recindex: {index}" )
+            print(f"file size {file_size:,} bytes, max_qsize: {max_qsize}, writeindex: {write_idx:,}, readindex: {read_idx:,}" )
+            print(f"file size {file_size:,} bytes, samples/sec {int(file_size/4 /time_ctr):,}, curr_q_size {write_idx - read_idx}")
 
         except FileNotFoundError:
             print("File not found.")
@@ -133,7 +140,6 @@ def main(cardno, rx_chan, fs, bw, freq):
             print("OS error occurred.")
             running = False;
 
-        time.sleep(3)
 
     getblocks.join()
     recordblocks.join()
