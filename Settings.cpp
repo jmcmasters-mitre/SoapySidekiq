@@ -211,6 +211,16 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     }
     SoapySDR_logf(SOAPY_SDR_TRACE, "channel mode set to single");
 
+    if (args.count("clock_source") > 0) 
+    {
+        setClockSource(args.at("clock_source"));
+    }
+
+    if (args.count("time_source") > 0) 
+    {
+        setTimeSource(args.at("time_source"));
+    }
+
 
     status = skiq_read_parameters(card, &this->param);
     if (status != 0)
