@@ -852,14 +852,14 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
             case skiq_m2_2280:
             case skiq_z2:
             case skiq_z3u:
-                return (max_attenuation_index - static_cast<int>(attenuation_index)) / 4;
+                return (max_attenuation_index - static_cast<int>(attenuation_index)) / 4.0;
                 break;
 
             // 0 to 167 [0 to 41.75 dB, 0.25 dB/step]
             case skiq_x4:
             case skiq_x2:
             case skiq_nv100:
-                return (max_attenuation_index - static_cast<int>(attenuation_index)) / 4;
+                return (max_attenuation_index - static_cast<int>(attenuation_index)) / 4.0;
                 break;
 
             default:
