@@ -154,6 +154,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         catch (const std::invalid_argument &)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR, "Requested card (%d), not found", std::stoi(args.at("card")));
+            throw std::runtime_error("");
         }
     }
     else
@@ -171,6 +172,18 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         current_tx_block_size = DEFAULT_TX_BUFFER_LENGTH;
     }
     SoapySDR_logf(SOAPY_SDR_INFO, "TX block size set to %u", current_tx_block_size);
+
+    /* set the source to what is passed in */
+    if (args.count("clock_source") > 0) 
+    {
+        setClockSource(args.at("clock_source"));
+    }
+
+    if (args.count("time_source") > 0) 
+    {
+        setTimeSource(args.at("time_source"));
+    }
+
 
     rx_hdl = skiq_rx_hdl_A1;
     tx_hdl = skiq_tx_hdl_A1;
@@ -829,15 +842,14 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
             case skiq_m2_2280:
             case skiq_z2:
             case skiq_z3u:
-                return (max_attenuation_index - static_cast<int>(attenuation_index) / 4);
+                return (max_attenuation_index - static_cast<int>(attenuation_index)) / 4;
                 break;
 
             // 0 to 167 [0 to 41.75 dB, 0.25 dB/step]
             case skiq_x4:
             case skiq_x2:
             case skiq_nv100:
-                return (max_attenuation_index - static_cast<int>(attenuation_index) / 4);
-                return static_cast<int>(attenuation_index / 4);
+                return (max_attenuation_index - static_cast<int>(attenuation_index)) / 4;
                 break;
 
             default:
