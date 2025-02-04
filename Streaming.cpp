@@ -117,6 +117,7 @@ void SoapySidekiq::rx_receive_operation_impl(void)
     uint32_t         len;
     bool             first = true;
     uint64_t         expected_timestamp = 0;
+    uint32_t         overrun_count =0;
 
 
     // metadata
@@ -138,84 +139,85 @@ void SoapySidekiq::rx_receive_operation_impl(void)
         //  check for overflow
         if (rxReadIndex == ((rxWriteIndex + 1) % DEFAULT_NUM_BUFFERS))
         {
-            SoapySDR_log(SOAPY_SDR_ERROR,
-                         "Detected overflow event in RX worker thread");
+            SoapySDR_log(SOAPY_SDR_WARNING,
+                         "Detected overflow event due to client not keeping up");
 
             SoapySDR_logf(SOAPY_SDR_DEBUG, "rxReadIndex %d, rxWriteIndex %d",
                           rxReadIndex, rxWriteIndex, overload);
 
-            throw std::runtime_error("");
+            rxReadIndex = (rxReadIndex + (DEFAULT_NUM_BUFFERS / 2)) % DEFAULT_NUM_BUFFERS;
+        	rx_receive_operation_overflow = true;
+
         }
-        else
+
+        /*
+         * put the block into a ring buffer so readStream can read it out
+         * at a different pace 
+         * skiq_receive is in blocking mode, so it will allow the other 
+         * threads to run */
+        status = skiq_receive(card, &rcvd_hdl, &tmp_p_rx_block, &len);
+        if (status == skiq_rx_status_success)
         {
-            /*
-             * put the block into a ring buffer so readStream can read it out
-             * at a different pace 
-             * skiq_receive is in blocking mode, so it will allow the other 
-             * threads to run */
-            status = skiq_receive(card, &rcvd_hdl, &tmp_p_rx_block, &len);
-            if (status == skiq_rx_status_success)
+            if (rcvd_hdl == rx_hdl)
             {
-                if (rcvd_hdl == rx_hdl)
+                if (len != rx_block_size_in_bytes)
                 {
-                    if (len != rx_block_size_in_bytes)
+                    SoapySDR_logf(SOAPY_SDR_ERROR, "received length %d is not the correct "
+                            "block size %d\n",
+                            len, rx_block_size_in_bytes);
+                    throw std::runtime_error("");
+                }
+
+                // get overload out of metadata
+                overload = tmp_p_rx_block->overload;
+
+                int num_words_read = (len / 4);
+
+                // check for timestamp error
+                if (first == false)
+                {
+                    if (expected_timestamp != tmp_p_rx_block->rf_timestamp)
                     {
-                        SoapySDR_logf(SOAPY_SDR_ERROR, "received length %d is not the correct "
-                                      "block size %d\n",
-                                      len, rx_block_size_in_bytes);
-                        throw std::runtime_error("");
-                    }
+                        SoapySDR_log(SOAPY_SDR_WARNING,
+                                "Detected timestamp overflow in RX Sidekiq Thread");
+                        SoapySDR_logf(SOAPY_SDR_DEBUG, "expected timestamp %lu, "
+                                "actual %lu",
+                                expected_timestamp, tmp_p_rx_block->rf_timestamp);
 
-                    // get overload out of metadata
-                    overload = tmp_p_rx_block->overload;
-
-                    int num_words_read = (len / 4);
-
-                    // check for timestamp error
-                    if (first == false)
-                    {
-                        if (expected_timestamp != tmp_p_rx_block->rf_timestamp)
-                        {
-                            SoapySDR_log(SOAPY_SDR_WARNING,
-                                         "Detected timestamp overflow in RX Sidekiq Thread");
-                            SoapySDR_logf(SOAPY_SDR_DEBUG, "expected timestamp %lu, "
-                                          "actual %lu",
-                                          expected_timestamp, tmp_p_rx_block->rf_timestamp);
-
-                            // restart the timestamp checking
-                            first = true;
-                        }
-                        else
-                        {
-                            expected_timestamp += rx_payload_size_in_words;
-                        }
+                        // restart the timestamp checking
+                        first = true;
                     }
                     else
                     {
-                        first = false;
-                        expected_timestamp = tmp_p_rx_block->rf_timestamp +
-                                             rx_payload_size_in_words;
+                        expected_timestamp += rx_payload_size_in_words;
                     }
-
-                    // copy the data out of the rx_buffer and into the RAM
-                    // buffers copy the header in also
-                    memcpy(p_rx_block[rxWriteIndex], (void *)tmp_p_rx_block,
-                           (num_words_read * sizeof(uint32_t)));
-
-                    rxWriteIndex = (rxWriteIndex + 1) % DEFAULT_NUM_BUFFERS;
                 }
-            }
-            else
-            {
-                if (status != skiq_rx_status_no_data)
+                else
                 {
-                    SoapySDR_logf(SOAPY_SDR_FATAL,
-                                  "skiq_receive failed, (card %u) status %d",
-                                  card, status);
-                    throw std::runtime_error("");
+                    first = false;
+                    expected_timestamp = tmp_p_rx_block->rf_timestamp +
+                        rx_payload_size_in_words;
                 }
+
+                // copy the data out of the rx_buffer and into the RAM
+                // buffers copy the header in also
+                memcpy(p_rx_block[rxWriteIndex], (void *)tmp_p_rx_block,
+                        (num_words_read * sizeof(uint32_t)));
+
+                rxWriteIndex = (rxWriteIndex + 1) % DEFAULT_NUM_BUFFERS;
             }
         }
+        else
+        {
+            if (status != skiq_rx_status_no_data)
+            {
+                SoapySDR_logf(SOAPY_SDR_FATAL,
+                        "skiq_receive failed, (card %u) status %d",
+                        card, status);
+                throw std::runtime_error("");
+            }
+        }
+        
     }
 
     SoapySDR_log(SOAPY_SDR_INFO, "Exiting RX Sidekiq Thread");

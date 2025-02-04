@@ -153,7 +153,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         }
         catch (const std::invalid_argument &)
         {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "Requested card (%d), not found", std::stoi(args.at("card")));
+            SoapySDR_logf(SOAPY_SDR_ERROR, "Requested card not found");
             throw std::runtime_error("");
         }
     }
