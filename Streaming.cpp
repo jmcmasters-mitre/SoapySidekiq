@@ -117,8 +117,6 @@ void SoapySidekiq::rx_receive_operation_impl(void)
     uint32_t         len;
     bool             first = true;
     uint64_t         expected_timestamp = 0;
-    uint32_t         overrun_count =0;
-
 
     // metadata
     uint64_t overload = 0;
@@ -146,8 +144,6 @@ void SoapySidekiq::rx_receive_operation_impl(void)
                           rxReadIndex, rxWriteIndex, overload);
 
             rxReadIndex = (rxReadIndex + (DEFAULT_NUM_BUFFERS / 2)) % DEFAULT_NUM_BUFFERS;
-        	rx_receive_operation_overflow = true;
-
         }
 
         /*

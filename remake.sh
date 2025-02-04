@@ -2,6 +2,7 @@
 
 cd build
 make clean
-make
+bear -- make
 sudo make install
 sudo ldconfig
+cp compile_commands.json ../.
