@@ -88,6 +88,7 @@ def receive(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name, num_loops)
     else:
         while running:
             receive_num_blocks(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name, num_loops)
+            change_rx_channel
 
 
     SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, 

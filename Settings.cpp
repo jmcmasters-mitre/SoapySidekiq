@@ -1674,6 +1674,64 @@ std::string SoapySidekiq::getTimeSource(void) const
     return "NONE";
 }
 
+void check_1pps(uint8_t card, skiq_1pps_source_t pps_source)
+{
+    int32_t status = 0;
+    uint32_t pulseCount = 0;
+    uint32_t tryCount = 0;
+    uint64_t lastTimestamp = 0;
+    uint64_t rfTs = 0;
+    uint64_t sysTs = 0;
+    bool has_pps_source = false;
+    useconds_t one_second_usecs = 1000000;
+
+    if ((pps_source == skiq_1pps_source_external) || (pps_source == skiq_1pps_source_host))
+    {
+        do
+        {
+            status = skiq_read_last_1pps_timestamp(card, &rfTs, &sysTs);
+            if (0 != status)
+            {
+                SoapySDR_logf(SOAPY_SDR_WARNING, "failed to get timestamp for card %" PRIu8
+                        " (status = %" PRIi32 "); will try again\n", card, status);
+            }
+            else
+            {
+                if (sysTs != lastTimestamp)
+                {
+                    pulseCount++;
+                    lastTimestamp = sysTs;
+                    SoapySDR_logf(SOAPY_SDR_DEBUG, "found 1pps pulse");
+                }
+            }
+            tryCount++;
+
+            if (tryCount > 1)
+            {
+                if (pulseCount == tryCount)
+                {
+                    has_pps_source = true; 
+                }
+            }
+
+            /* sleep for a second */
+            usleep(one_second_usecs);
+
+        } while ((has_pps_source == false) || (tryCount <= 1));
+
+        if (has_pps_source == true)
+        {
+            SoapySDR_logf(SOAPY_SDR_INFO, "Expected 1pps, found 1pps pulse");
+        }
+        else
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR, "Expected 1pps, but no 1pps pulse found");
+            throw std::runtime_error("");
+        } 
+    }
+
+}
+
 void SoapySidekiq::setTimeSource(const std::string &source)
 {
     int status = 0;
@@ -1708,6 +1766,8 @@ void SoapySidekiq::setTimeSource(const std::string &source)
     }
 
     SoapySDR_logf(SOAPY_SDR_INFO, "1pps source set to %s", source.c_str());
+
+    check_1pps(card, pps_source);
 
     return;
 }
