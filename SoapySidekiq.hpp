@@ -260,6 +260,7 @@ class SoapySidekiq : public SoapySDR::Device
         uint32_t rx_payload_size_in_words{};
 
         //  tx
+        std::mutex tx_mutex;
         std::mutex tx_buf_mutex;
         pthread_mutex_t space_avail_mutex;
         pthread_cond_t space_avail_cond;
@@ -329,6 +330,10 @@ class SoapySidekiq : public SoapySDR::Device
         void rx_receive_operation(void);
         void rx_receive_operation_impl(void);
         static std::vector<SoapySDR::Kwargs> sidekiq_devices;
+
+        // tx thread
+        std::thread _tx_streaming_thread;
+        void tx_streaming_start();
 
         // tx callback method
         void tx_complete(int32_t status, skiq_tx_block_t *p_data, uint32_t txIndex);

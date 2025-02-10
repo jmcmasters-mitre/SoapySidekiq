@@ -1685,6 +1685,8 @@ void check_1pps(uint8_t card, skiq_1pps_source_t pps_source)
     bool has_pps_source = false;
     useconds_t one_second_usecs = 1000000;
 
+    SoapySDR_logf(SOAPY_SDR_TRACE, "check_1pps");
+
     if ((pps_source == skiq_1pps_source_external) || (pps_source == skiq_1pps_source_host))
     {
         do
@@ -1697,6 +1699,7 @@ void check_1pps(uint8_t card, skiq_1pps_source_t pps_source)
             }
             else
             {
+                SoapySDR_logf(SOAPY_SDR_TRACE, "read last returned sysTs %d, lastTimesamp %d, status %d", status);
                 if (sysTs != lastTimestamp)
                 {
                     pulseCount++;
@@ -1706,6 +1709,8 @@ void check_1pps(uint8_t card, skiq_1pps_source_t pps_source)
             }
             tryCount++;
 
+            SoapySDR_logf(SOAPY_SDR_TRACE, "read last returned: sysTs %lu, lastTimesamp %lu, trycount %lu, status %d", 
+                            sysTs, lastTimestamp, tryCount, status);
             if (tryCount > 1)
             {
                 if (pulseCount == tryCount)
@@ -1714,10 +1719,12 @@ void check_1pps(uint8_t card, skiq_1pps_source_t pps_source)
                 }
             }
 
+            SoapySDR_logf(SOAPY_SDR_DEBUG, "");
+
             /* sleep for a second */
             usleep(one_second_usecs);
 
-        } while ((has_pps_source == false) || (tryCount <= 1));
+        } while ((has_pps_source == false) && (tryCount <= 1));
 
         if (has_pps_source == true)
         {
@@ -1729,7 +1736,6 @@ void check_1pps(uint8_t card, skiq_1pps_source_t pps_source)
             throw std::runtime_error("");
         } 
     }
-
 }
 
 void SoapySidekiq::setTimeSource(const std::string &source)
