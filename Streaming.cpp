@@ -467,11 +467,13 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
                                  const size_t numElems)
 {
     int status = 0;
+    bool rx_streaming_on_1pps_started = false;
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "activateStream");
 
     if (stream == RX_STREAM)
     {
+
         /* set rx source as iq data */
         if (iq_swap == true)
         {
@@ -514,6 +516,20 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         /* start rx streaming */
         if (flags == SOAPY_SDR_HAS_TIME)
         {
+            if (tx_start_signal == true)
+            {
+                /* if skiq_start_tx_streaming_on_1pps is called, then skiq_start_rx_streaming_on_1pps 
+                 * is called the second one called will block until the first one finishes.  
+                 * So the second one called will unblock 2 seconds later. 
+                 * So warn the user */
+                SoapySDR_logf(SOAPY_SDR_WARNING, "The skiq_start_tx_streaming_on_1pps is" 
+                                                 " still blocked waiting for 1pps to occur"
+                                                 " so calling activating a RX stream will be"
+                                                 " delayed 2 seconds");
+
+            }
+
+            rx_streaming_on_1pps_started = true;
             status = skiq_start_rx_streaming_on_1pps(card, rx_hdl, 0);
             if (status != 0)
             {
@@ -522,6 +538,7 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
                               card, status);
                 throw std::runtime_error("");
             }
+            rx_streaming_on_1pps_started = false;
         }
         else
         {
@@ -610,6 +627,19 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         /* start tx streaming */
         if (flags == SOAPY_SDR_HAS_TIME)
         {
+            rx_streaming_on_1pps_started = true;
+            if (rx_streaming_on_1pps_started == true)
+            {
+                /* if skiq_start_rx_streaming_on_1pps is called, then skiq_start_tx_streaming_on_1pps 
+                 * is called the second one called will block until the first one finishes.  
+                 * So the second one called will unblock 2 seconds later. 
+                 * So warn the user */
+                SoapySDR_logf(SOAPY_SDR_WARNING, "The skiq_start_rx_streaming_on_1pps is" 
+                                                 " still blocked waiting for 1pps to occur"
+                                                 " so calling activating a TX stream will be"
+                                                 " delayed 2 seconds");
+
+            }
             /* skiq_start_rx_streaming_on_1pps blocks until data starts flowing
              * but this function needs to return immediately so the application can start
              * sending in blocks.
