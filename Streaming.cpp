@@ -10,6 +10,8 @@
 #include <SoapySDR/Formats.hpp>
 #include <sidekiq_types.h>
 
+SoapySidekiq *SoapySidekiq::thisClassAddr = nullptr;
+
 // Attempted to put this in SoapySidekiq.hpp and it would not link
 // could not understand why
 bool   rx_start_signal = false;
@@ -563,6 +565,8 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
     }
     else if (stream == TX_STREAM)
     {
+        thisClassAddr = this;
+
         /* set as iq data */
         if (iq_swap == true)
         {
@@ -627,7 +631,6 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         /* start tx streaming */
         if (flags == SOAPY_SDR_HAS_TIME)
         {
-            rx_streaming_on_1pps_started = true;
             if (rx_streaming_on_1pps_started == true)
             {
                 /* if skiq_start_rx_streaming_on_1pps is called, then skiq_start_tx_streaming_on_1pps 
@@ -662,12 +665,13 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
                               card, status);
                 throw std::runtime_error("");
             }
-            SoapySDR_logf(SOAPY_SDR_INFO, "TX start streaming");
+            SoapySDR_logf(SOAPY_SDR_INFO,
+                    "started transmit streaming on handle: %u",
+                    tx_hdl);
         }
-        SoapySDR_logf(SOAPY_SDR_INFO,
-                      "started transmit streaming on handle: %u",
-                      tx_hdl);
     }
+
+    first_transmit = true;
 
     return 0;
 }
@@ -887,6 +891,14 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
     if (stream != TX_STREAM)
     {
         return SOAPY_SDR_NOT_SUPPORTED;
+    }
+
+    if (first_transmit == true)
+    {
+        pthread_mutex_lock(&tx_enabled_mutex);
+        pthread_cond_wait(&tx_enabled_cond, &tx_enabled_mutex);
+        pthread_mutex_unlock(&tx_enabled_mutex);
+        first_transmit = false;
     }
 
     if (numElems % current_tx_block_size != 0)

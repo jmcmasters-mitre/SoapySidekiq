@@ -25,6 +25,7 @@
 #define SLEEP_1SEC (1 * 1000000)
 #define NANOS_IN_SEC (1000000000ULL)
 
+
 class SoapySidekiq : public SoapySDR::Device
 {
     public:
@@ -262,10 +263,13 @@ class SoapySidekiq : public SoapySDR::Device
         //  tx
         std::mutex tx_mutex;
         std::mutex tx_buf_mutex;
+        pthread_mutex_t tx_enabled_mutex;
+        pthread_cond_t tx_enabled_cond;
         pthread_mutex_t space_avail_mutex;
         pthread_cond_t space_avail_cond;
         bool ready{};
         int32_t *p_tx_status{};
+        bool first_transmit{};
 
         uint8_t  num_tx_channels{};
         skiq_tx_hdl_t tx_hdl{};
@@ -316,6 +320,22 @@ class SoapySidekiq : public SoapySDR::Device
             delete instance;
         }
 
+        // TX enabled callback static function
+        // The registration requires a static function instead of a method so
+        // this must be created to be able to register it.
+        // This function calls the tx_enabled method.
+        static void static_tx_enabled_callback(uint8_t card, int32_t status) 
+        {
+            // the structure contains the SoapySidekiq instance and the index of the block
+            // that was transmitted
+            SoapySidekiq *self = thisClassAddr;
+
+            // Call the member function
+            self->tx_enabled(card, status);
+        }
+
+        static SoapySidekiq *thisClassAddr;
+
     public:
         struct passedStruct
         {
@@ -337,4 +357,9 @@ class SoapySidekiq : public SoapySDR::Device
 
         // tx callback method
         void tx_complete(int32_t status, skiq_tx_block_t *p_data, uint32_t txIndex);
+
+        // tx enabled callback
+        void tx_enabled(uint8_t card, int32_t status);
 };
+
+
