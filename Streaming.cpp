@@ -113,7 +113,7 @@ void SoapySidekiq::tx_streaming_start(void)
         throw std::runtime_error("");
     }
 
-    SoapySDR_logf(SOAPY_SDR_INFO, "TX start streaming on 1pps");
+    SoapySDR_logf(SOAPY_SDR_INFO, "TX start streaming on 1pps completed");
 
     tx_start_signal = false;
 }
@@ -651,10 +651,12 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
             _tx_streaming_thread =
                 std::thread(&SoapySidekiq::tx_streaming_start, this);
 
+            first_transmit = true;
+
             // Notify the thread to run
             tx_start_signal = true;
             _cv.notify_one();  
-            }
+        }
         else
         {
             status = skiq_start_tx_streaming(card, tx_hdl);
@@ -671,7 +673,6 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         }
     }
 
-    first_transmit = true;
 
     return 0;
 }
@@ -895,6 +896,8 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
 
     if (first_transmit == true)
     {
+        SoapySDR_logf(SOAPY_SDR_DEBUG, "writeStream waiting on enabled");
+
         pthread_mutex_lock(&tx_enabled_mutex);
         pthread_cond_wait(&tx_enabled_cond, &tx_enabled_mutex);
         pthread_mutex_unlock(&tx_enabled_mutex);
@@ -963,7 +966,7 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             tx_buf_mutex.unlock();
             pthread_mutex_lock(&space_avail_mutex);
             // wait for a packet to complete
-            ready = false;
+            space_avail = false;
             pthread_cond_wait(&space_avail_cond, &space_avail_mutex);
             pthread_mutex_unlock(&space_avail_mutex);
 
@@ -993,11 +996,11 @@ int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
             pthread_mutex_lock(&space_avail_mutex);
 
             // wait for a packet to complete
-            while (!ready)
+            while (!space_avail)
             {
                 pthread_cond_wait(&space_avail_cond, &space_avail_mutex);
             }
-            ready = false;
+            space_avail = false;
             pthread_mutex_unlock(&space_avail_mutex);
         }
         else if (status != 0)

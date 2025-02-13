@@ -267,7 +267,7 @@ class SoapySidekiq : public SoapySDR::Device
         pthread_cond_t tx_enabled_cond;
         pthread_mutex_t space_avail_mutex;
         pthread_cond_t space_avail_cond;
-        bool ready{};
+        bool space_avail{};
         int32_t *p_tx_status{};
         bool first_transmit{};
 

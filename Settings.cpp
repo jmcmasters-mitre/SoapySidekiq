@@ -89,7 +89,7 @@ void SoapySidekiq::tx_complete(int32_t status, skiq_tx_block_t *p_data, uint32_t
     {
         // Signal the condition variable
         pthread_mutex_lock(&space_avail_mutex);
-        ready = true;
+        space_avail = true;
         pthread_cond_signal(&space_avail_cond);
         pthread_mutex_unlock(&space_avail_mutex);
     }
