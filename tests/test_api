@@ -367,6 +367,10 @@ def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
     do_frequency(sdr, handle)
     user_input = input("Press any key to continue")
 
+    #  *** Gain API
+    do_gain(sdr, handle)
+    user_input = input("Press any key to continue")
+
     #  *** Frontend Corrections API
     do_frontend(sdr, handle)
 
@@ -385,9 +389,6 @@ def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
     user_input = input("Press any key to continue")
     do_sensors(sdr, handle)
 
-    #  *** Gain API
-    do_gain(sdr, handle)
-    user_input = input("Press any key to continue")
 
 
 def parse_command_line_arguments():
