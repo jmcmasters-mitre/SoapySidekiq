@@ -118,10 +118,9 @@ def main(cardno, serial, handle,
             print(". ", end='', flush=True)
             total_samps = 0
 
-            underruns = sdr.readStreamStatus(tx_stream)
-            if last_underruns != underruns.ret:
-                print(f"\nunderruns: {underruns.ret}")
-                last_underruns = underruns.ret
+            result = sdr.readStreamStatus(tx_stream)
+            if result.ret == SOAPY_SDR_UNDERFLOW:
+                print(f"\nunderruns detected")
 
     sdr.deactivateStream(tx_stream, SoapySDR.SOAPY_SDR_HAS_TIME)  
     sdr.closeStream(tx_stream)
@@ -148,7 +147,7 @@ def parse_command_line_arguments():
     parser.add_argument('--offset', type=float, required=False, dest='offset',
                         default=None, help='Offset from LO')
     parser.add_argument('-a', type=int, required=False, dest='attenuation',
-                        default=0, help='TX attenuation')
+                        default=35, help='TX gain in dB')
     
     return parser.parse_args(sys.argv[1:])
 

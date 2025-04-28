@@ -143,7 +143,7 @@ def parse_command_line_arguments():
     parser.add_argument('--offset', type=float, required=False, dest='offset',
                         default=None, help='Offset from LO')
     parser.add_argument('-a', type=int, required=False, dest='attenuation',
-                        default=0, help='TX attenuation')
+                        default=35, help='TX gain in dB')
     
     return parser.parse_args(sys.argv[1:])
 

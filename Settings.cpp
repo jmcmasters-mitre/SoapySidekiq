@@ -89,7 +89,7 @@ void SoapySidekiq::tx_complete(int32_t status, skiq_tx_block_t *p_data, uint32_t
     {
         // Signal the condition variable
         pthread_mutex_lock(&space_avail_mutex);
-        ready = true;
+        space_avail = true;
         pthread_cond_signal(&space_avail_cond);
         pthread_mutex_unlock(&space_avail_mutex);
     }
@@ -97,6 +97,16 @@ void SoapySidekiq::tx_complete(int32_t status, skiq_tx_block_t *p_data, uint32_t
 
 }
 
+void SoapySidekiq::tx_enabled(uint8_t card, int32_t status)
+{
+    SoapySDR_logf(SOAPY_SDR_TRACE, "tx enable received");
+    
+    // Signal the condition variable
+    pthread_mutex_lock(&tx_enabled_mutex);
+    pthread_cond_signal(&tx_enabled_cond);
+    pthread_mutex_unlock(&tx_enabled_mutex);
+
+}
 
 std::vector<SoapySDR::Kwargs> SoapySidekiq::sidekiq_devices;
 bool                          SoapySidekiq::rx_running;
@@ -153,7 +163,8 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         }
         catch (const std::invalid_argument &)
         {
-            SoapySDR_logf(SOAPY_SDR_ERROR, "Requested card (%d), not found", std::stoi(args.at("card")));
+            SoapySDR_logf(SOAPY_SDR_ERROR, "Requested card not found");
+            throw std::runtime_error("");
         }
     }
     else
@@ -171,6 +182,18 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         current_tx_block_size = DEFAULT_TX_BUFFER_LENGTH;
     }
     SoapySDR_logf(SOAPY_SDR_INFO, "TX block size set to %u", current_tx_block_size);
+
+    /* set the source to what is passed in */
+    if (args.count("clock_source") > 0) 
+    {
+        setClockSource(args.at("clock_source"));
+    }
+
+    if (args.count("time_source") > 0) 
+    {
+        setTimeSource(args.at("time_source"));
+    }
+
 
     rx_hdl = skiq_rx_hdl_A1;
     tx_hdl = skiq_tx_hdl_A1;
@@ -198,6 +221,16 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     }
     SoapySDR_logf(SOAPY_SDR_TRACE, "channel mode set to single");
 
+    if (args.count("clock_source") > 0) 
+    {
+        setClockSource(args.at("clock_source"));
+    }
+
+    if (args.count("time_source") > 0) 
+    {
+        setTimeSource(args.at("time_source"));
+    }
+
 
     status = skiq_read_parameters(card, &this->param);
     if (status != 0)
@@ -210,17 +243,17 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     part = param.card_param.part_type;
     part_str = skiq_part_string(part);
 
-    SoapySDR_logf(SOAPY_SDR_INFO, "card %u, part type is %s", card, part_str.c_str());
+    SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, part type is %s", card, part_str.c_str());
 
     /* set iq order to iq instead of qi */
     if (iq_swap == true)
     {
-        SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, setting iq mode to I then Q");
+        SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, setting iq mode to I then Q", this->card);
         iq_order = skiq_iq_order_iq;
     }
     else
     {
-        SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, setting iq mode to Q then I");
+        SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, setting iq mode to Q then I", this->card);
         iq_order = skiq_iq_order_qi;
     }
 
@@ -264,8 +297,8 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     this->resolution = tmp_resolution;
     this->maxValue = (double) ((1 << (tmp_resolution-1))-1);
 
-    SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, card resolution: %u bits, max ADC value: %.0f",
-                  card, this->resolution, (uint64_t) this->maxValue);
+    SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, card resolution: %u bits, max ADC value: %u",
+                  card, this->resolution, (uint32_t) this->maxValue);
 
     // allocate for # blocks
     p_tx_status = static_cast<int32_t*>(calloc(DEFAULT_NUM_BUFFERS, sizeof(*p_tx_status)));
@@ -280,7 +313,7 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
         p_tx_status[i] = 0;
     }
 
-    // register the callback
+    // register the transmit complete callback
     status = skiq_register_tx_complete_callback(card,
                                         &SoapySidekiq::static_tx_complete_callback);
     if (status != 0)
@@ -290,9 +323,23 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
                       card, status);
         throw std::runtime_error("");
     }
-
     pthread_mutex_init(&space_avail_mutex, nullptr);
     pthread_cond_init(&space_avail_cond, nullptr);
+
+
+    // register the transmit enabled callback
+    status = skiq_register_tx_enabled_callback(card,
+                                        &SoapySidekiq::static_tx_enabled_callback);
+    if (status != 0)
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR, "skiq_register_tx_enabled_callback failed, "
+                      "card: %u status: %d",
+                      card, status);
+        throw std::runtime_error("");
+    }
+
+    pthread_mutex_init(&tx_enabled_mutex, nullptr);
+    pthread_cond_init(&tx_enabled_cond, nullptr);
 
     SoapySDR_logf(SOAPY_SDR_TRACE, "leaving constructor", card);
 }
@@ -829,15 +876,14 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
             case skiq_m2_2280:
             case skiq_z2:
             case skiq_z3u:
-                return (max_attenuation_index - static_cast<int>(attenuation_index) / 4);
+                return (max_attenuation_index - static_cast<int>(attenuation_index)) / 4.0;
                 break;
 
             // 0 to 167 [0 to 41.75 dB, 0.25 dB/step]
             case skiq_x4:
             case skiq_x2:
             case skiq_nv100:
-                return (max_attenuation_index - static_cast<int>(attenuation_index) / 4);
-                return static_cast<int>(attenuation_index / 4);
+                return (max_attenuation_index - static_cast<int>(attenuation_index)) / 4.0;
                 break;
 
             default:
@@ -1484,12 +1530,12 @@ void SoapySidekiq::writeSetting(const std::string &key,
         /* set iq order to iq instead of qi */
         if (iq_swap == true)
         {
-            SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, setting iq mode to I then Q");
+            SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, setting iq mode to I then Q", this->card);
             iq_order = skiq_iq_order_iq;
         }
         else
         {
-            SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, setting iq mode to Q then I");
+            SoapySDR_logf(SOAPY_SDR_INFO, "card: %u, setting iq mode to Q then I", this->card);
             iq_order = skiq_iq_order_qi;
         }
 
@@ -1652,6 +1698,70 @@ std::string SoapySidekiq::getTimeSource(void) const
     return "NONE";
 }
 
+void check_1pps(uint8_t card, skiq_1pps_source_t pps_source)
+{
+    int32_t status = 0;
+    uint32_t pulseCount = 0;
+    uint32_t tryCount = 0;
+    uint64_t lastTimestamp = 0;
+    uint64_t rfTs = 0;
+    uint64_t sysTs = 0;
+    bool has_pps_source = false;
+    useconds_t one_second_usecs = 1000000;
+
+    SoapySDR_logf(SOAPY_SDR_TRACE, "check_1pps");
+
+    if ((pps_source == skiq_1pps_source_external) || (pps_source == skiq_1pps_source_host))
+    {
+        do
+        {
+            status = skiq_read_last_1pps_timestamp(card, &rfTs, &sysTs);
+            if (0 != status)
+            {
+                SoapySDR_logf(SOAPY_SDR_WARNING, "failed to get timestamp for card %" PRIu8
+                        " (status = %" PRIi32 "); will try again\n", card, status);
+            }
+            else
+            {
+                if (sysTs != lastTimestamp)
+                {
+                    SoapySDR_logf(SOAPY_SDR_TRACE, "sysTs %lu, " 
+                                           "lastTimesamp %lu, trycount %lu, status %d", 
+                                           sysTs, lastTimestamp, tryCount, status);
+                    pulseCount++;
+                    lastTimestamp = sysTs;
+                    SoapySDR_logf(SOAPY_SDR_DEBUG, "found 1pps pulse");
+                }
+            }
+            tryCount++;
+
+            if (tryCount > 1)
+            {
+                if (pulseCount == tryCount)
+                {
+                    has_pps_source = true; 
+                }
+            }
+
+            SoapySDR_logf(SOAPY_SDR_DEBUG, "");
+
+            /* sleep for a second */
+            usleep(one_second_usecs);
+
+        } while ((has_pps_source == false) && (tryCount <= 1));
+
+        if (has_pps_source == true)
+        {
+            SoapySDR_logf(SOAPY_SDR_INFO, "Expected 1pps, found 1pps pulse");
+        }
+        else
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR, "Expected 1pps, but no 1pps pulse found");
+            throw std::runtime_error("");
+        } 
+    }
+}
+
 void SoapySidekiq::setTimeSource(const std::string &source)
 {
     int status = 0;
@@ -1686,6 +1796,8 @@ void SoapySidekiq::setTimeSource(const std::string &source)
     }
 
     SoapySDR_logf(SOAPY_SDR_INFO, "1pps source set to %s", source.c_str());
+
+    check_1pps(card, pps_source);
 
     return;
 }

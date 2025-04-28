@@ -11,11 +11,15 @@ from SoapySDR import *
 
 DEFAULT_NUM_BLOCKS = 30000
 
+ch_index = 0
 running = True
 tx_total_samps = 0
 rx_total_samps = 0
 tx_total_blocks = 0
 rx_total_blocks = 0
+
+rx_lo_execution_times = []
+transmit_execution_times = []
 
 def signal_handler(sig, frame):
     global running
@@ -24,7 +28,7 @@ def signal_handler(sig, frame):
 
 
 def transmit(sdr, tx_stream, buff_len, tx_buff, rate):
-    global running, tx_total_samps, tx_total_blocks
+    global running, tx_total_samps, tx_total_blocks, transmit_execution_times 
     SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"in transmit")
 
     print(f"tx buff len: {buff_len}")
@@ -36,7 +40,11 @@ def transmit(sdr, tx_stream, buff_len, tx_buff, rate):
 
     while running:
         try:
+            start_time = time.perf_counter()
             rc = sdr.writeStream(tx_stream, [tx_buff], buff_len)
+            end_time = time.perf_counter()
+            transmit_execution_times.append(end_time - start_time)
+
             tx_total_blocks += 1
 
             if rc.ret != buff_len:
@@ -74,7 +82,24 @@ def receive_num_blocks(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name,
         rx_total_samps += buff_len
         #print(f"+{rx_total_blocks}", end='\n', flush=True)
 
-def receive(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name, num_loops):
+def change_rx_channel(sdr, rx_handle):
+    global ch_index, rx_lo_execution_times 
+
+    ch_index = ((ch_index + 1) % 6) 
+    if ch_index == 0:
+        ch_index = 1
+
+    freq = ch_index * 1000e6
+
+    print(f"ch_index {ch_index}, freq {freq}")
+
+    start_time = time.perf_counter()
+    sdr.setFrequency(SOAPY_SDR_RX, rx_handle, freq)  
+    end_time = time.perf_counter()
+
+    rx_lo_execution_times.append(end_time - start_time)
+
+def receive(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name, num_loops, rx_handle):
     global running, rx_total_samps, rx_total_blocks, tx_total_blocks
 
     SoapySDR.log(SoapySDR.SOAPY_SDR_TRACE,"in receive")
@@ -84,11 +109,16 @@ def receive(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name, num_loops)
     if num_loops:
         while num_loops > 0:
             receive_num_blocks(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name, num_loops)
+            sdr.deactivateStream(rx_stream)
+            change_rx_channel(sdr, rx_handle)
+            sdr.activateStream(rx_stream)
             num_loops -= 1
     else:
         while running:
             receive_num_blocks(sdr, rx_stream, num_blocks, buff_len, rx_buff, file_name, num_loops)
-            change_rx_channel
+            sdr.deactivateStream(rx_stream)
+            change_rx_channel(sdr, rx_handle)
+            sdr.activateStream(rx_stream)
 
 
     SoapySDR.log(SoapySDR.SOAPY_SDR_INFO, 
@@ -217,7 +247,7 @@ def main(cardno, serial,
         sdr.setGain(SOAPY_SDR_TX, tx_handle, float(0))
 
     transmit_thread = threading.Thread(target=transmit, name='transmit',args=(sdr,tx_stream,tx_buff_len,tx_buff,rate, ))
-    receive_thread = threading.Thread(target=receive, name='receive',args=(sdr,rx_stream,num_blocks,rx_buff_len,rx_buff,file_name,num_loops,  ))
+    receive_thread = threading.Thread(target=receive, name='receive',args=(sdr,rx_stream,num_blocks,rx_buff_len,rx_buff,file_name,num_loops,rx_handle,  ))
 
     transmit_thread.start()
     receive_thread.start()
@@ -228,11 +258,16 @@ def main(cardno, serial,
             time.sleep(1)
             time_ctr += 1
 
-            print(f"\trx_total_samps: {rx_total_samps:,}, \trx_total_blocks: {rx_total_blocks:,}"
-                    f"\trx samp/sec: {int(rx_total_samps / time_ctr):,}")
+            # Format with leading zeros and commas, handling width properly
+            print(f"\nrx_total_samps: {rx_total_samps:11,d}," 
+                  f"\trx_total_blocks: {int(rx_total_blocks):6,d},"
+                  f"\trx samp/sec: {int(rx_total_samps / time_ctr):10,d}")
 
-            print(f"\ttx_total_samps: {tx_total_samps:,}, \ttx_total_blocks: {tx_total_blocks:,}"
-                    f"\ttx samp/sec: {int(tx_total_samps / time_ctr):,}\n")
+            print(f"tx_total_samps: {tx_total_samps:11,d}," 
+                  f"\ttx_total_blocks: {int(tx_total_blocks):6,d},"
+                  f"\ttx samp/sec: {int(tx_total_samps / time_ctr):10,d}\n")
+
+
 
         except FileNotFoundError:
             print("File not found.")
@@ -245,6 +280,18 @@ def main(cardno, serial,
     transmit_thread.join()
     receive_thread.join()
 
+    # Calculate statistics
+    average_time = sum(rx_lo_execution_times) / len(rx_lo_execution_times)
+    max_time = max(rx_lo_execution_times)
+
+    print(f"\nAverage rx_lo execution time: {average_time:.6f} seconds")
+    print(f"Maximum rx_lo execution time: {max_time:.6f} seconds\n")
+
+    average_time = sum(transmit_execution_times) / len(transmit_execution_times)
+    max_time = max(transmit_execution_times)
+
+    print(f"\nAverage transmit execution time: {average_time:.6f} seconds")
+    print(f"Maximum transmit execution time: {max_time:.6f} seconds\n")
 
 def parse_command_line_arguments():
     """ Create command line options for transmit function """
