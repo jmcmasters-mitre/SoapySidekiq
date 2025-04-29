@@ -104,6 +104,14 @@ class SoapySidekiq : public SoapySDR::Device
 
 
         /*******************************************************************
+         * Antenna API
+         ******************************************************************/
+  
+        std::vector<std::string> listAntennas(const int direction, 
+                const size_t channel  ) const;
+
+
+        /*******************************************************************
          * Frontend corrections API
          ******************************************************************/
 
@@ -120,6 +128,9 @@ class SoapySidekiq : public SoapySDR::Device
         /*******************************************************************
          * Gain API
          ******************************************************************/
+
+        std::vector<std::string> listGains(const int direction, 
+                const size_t channel) const;
 
         bool hasGainMode(const int direction,
                 const size_t channel) const;

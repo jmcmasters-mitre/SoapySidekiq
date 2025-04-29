@@ -442,10 +442,59 @@ size_t SoapySidekiq::getNumChannels(const int dir) const
  ******************************************************************/
 
 std::vector<std::string> SoapySidekiq::listAntennas(const int direction, const size_t channel) const {
-  std::vector<std::string> antennas;
-  antennas.push_back("RX");
-  antennas.push_back("TX");
-  return antennas;
+    std::vector<std::string> antennas;
+
+    SoapySDR_logf(SOAPY_SDR_TRACE, "listAntennas");
+    
+    if (direction == SOAPY_SDR_RX)
+    {
+        if (channel >= skiq_rx_hdl_end)
+        {
+            antennas.push_back("NONE");
+        }
+        else
+        {
+            if (this->param.rx_param[channel].num_trx_rf_ports > 0)
+            {
+                antennas.push_back("TRX");
+
+            }
+            else if (this->param.rx_param[channel].num_fixed_rf_ports > 0)
+            {
+                antennas.push_back("RX");
+            }
+            else
+            {
+                antennas.push_back("NONE");
+            }
+        }
+    }
+    else if (direction == SOAPY_SDR_TX)
+    {
+        if (channel >= skiq_tx_hdl_end)
+        {
+            antennas.push_back("NONE");
+        }
+        else
+        {
+            if (this->param.tx_param[channel].num_trx_rf_ports > 0)
+            {
+                antennas.push_back("TRX");
+
+            }
+            else if (this->param.tx_param[channel].num_fixed_rf_ports > 0)
+            {
+                antennas.push_back("TX");
+            }
+            else
+            {
+                antennas.push_back("NONE");
+            }
+        }
+    }
+
+
+    return antennas;
 }
 
 /*******************************************************************
@@ -583,6 +632,14 @@ bool SoapySidekiq::getDCOffsetMode(const int direction,
 /*******************************************************************
  * Gain API
  ******************************************************************/
+
+std::vector<std::string> SoapySidekiq::listGains(const int direction, const size_t channel) const {
+    //  list available gain elements,
+    std::vector<std::string> results;
+    SoapySDR_logf(SOAPY_SDR_TRACE, "listGains");
+    results.push_back("LNA");
+    return results;
+}
 
 // the Gain API is called for tx attenuation too.
 bool SoapySidekiq::hasGainMode(const int direction, const size_t channel) const

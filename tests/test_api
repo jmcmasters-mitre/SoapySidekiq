@@ -54,6 +54,9 @@ def do_frontend(sdr, handle):
 
 
 def do_gain(sdr, handle):
+    gains = sdr.listGains(SOAPY_SDR_RX, handle)
+    print(f"\t list_gains: {gains}")
+
     #  *** Gain API
     gain_mode = sdr.hasGainMode(SOAPY_SDR_RX, handle)
     print(f"\t has gain mode is: {gain_mode}")
@@ -366,6 +369,13 @@ def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
     #  *** Frequency API
     do_frequency(sdr, handle)
     user_input = input("Press any key to continue")
+
+    
+    antennas = sdr.listAntennas(SOAPY_SDR_RX, handle)
+    print(f"Antennas: {antennas})")
+
+    antennas = sdr.listAntennas(SOAPY_SDR_TX, handle)
+    print(f"Antennas: {antennas})")
 
     #  *** Gain API
     do_gain(sdr, handle)
