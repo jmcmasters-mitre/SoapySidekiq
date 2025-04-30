@@ -100,6 +100,12 @@ def do_gain(sdr, handle):
     print(f"\tgain range min {gain_range.minimum()}")
     print(f"\tgain range step {gain_range.step()}")
 
+    # get the rx gain range
+    gain_range_name = sdr.getGainRange(SOAPY_SDR_RX, handle, 'LNA')
+    print(f"\tgain range name max {gain_range_name.maximum()}")
+    print(f"\tgain range name min {gain_range_name.minimum()}")
+    print(f"\tgain range name step {gain_range_name.step()}")
+
     # get the tx attenuation range
     gain_range = sdr.getGainRange(SOAPY_SDR_TX, handle)
     print(f"\tattenuation range max {gain_range.maximum()}")

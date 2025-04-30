@@ -991,6 +991,15 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
 }
 
 SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
+                                           const size_t channel,
+                                           const std::string & name) const
+{
+    SoapySDR_log(SOAPY_SDR_TRACE, "getGainRange with name");
+    return getGainRange(direction, channel);
+}
+
+
+SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
                                            const size_t channel) const
 {
     SoapySDR_log(SOAPY_SDR_TRACE, "getGainRange");
