@@ -8,7 +8,7 @@ sudo rm -rf build
 mkdir build
 
 cd build
-cmake ../
+cmake ../ -D$1
 make clean
 make
 sudo make install

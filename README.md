@@ -1,20 +1,28 @@
 # Soapy SDR module for Epiq Solutions Sidekiq
 
+# Building using the install.sh script
+$ ./install.sh
 
-# Building for non-X40 cards:
+or if a platform 
+
+$ ./install.sh PLATFORM="msiq-g20g40"  or "msiq-x40", "msiq-z3u"
+
+# More detailed make and install info:
+
+# Building for non-platform cards:
 Use the normal build process for cmake projects:
 
-```
 $ mkdir build
 
 $ cd build
 
-$ cmake ../
+$ cmake ../ -DPLATFORM="<platform_name>"
 
 $ make -j8
 
 $ sudo make install
-```
+
+$ sudo ldconfig 
 
 
 # Building for the X40:
@@ -29,11 +37,9 @@ So we need to run:
 
 ```
 $ cmake .. -DPython3_EXECUTABLE=/usr/bin/python3.8 -DPython3_INCLUDE_DIR=/usr/include/python3.8 -DPython3_LIBRARY=/usr/lib/aarch64-linux-gnu/libpython3.8.so
-```
 
 We also need to make sure PYTHONPATH and LD_LIBRARY_PATH are set correctly:
 
-```
 $ export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib/epiq:/usr/lib/epiq:$LD_LIBRARY_PATH"
 ```
 
@@ -41,14 +47,7 @@ $ export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib/epiq:/usr/lib/epiq:$LD_LIBRARY
 $ export PYTHONPATH="/usr/local/lib/python3.8/site-packages$PYTHONPATH"
 ```
 
-The **SoapySidekiq** repo also needs to be build differently:
 
-## Building SoapySidekiq
-```
-$ cmake ../ -DPLATFORM="msiq-x40"
-```
-
-For all other cards, the normal cmake is sufficient.
 
 # Licensing information
 * https://github.com/pothosware/SoapySidekiq/blob/master/LICENSE
