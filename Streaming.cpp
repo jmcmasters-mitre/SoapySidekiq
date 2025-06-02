@@ -268,7 +268,15 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
             throw std::runtime_error("only one RX channel is supported simultaneously");
         }
 
-        rx_hdl = (skiq_rx_hdl_t)channels.at(0);
+        if (!(channels.empty()))
+        { 
+            rx_hdl = (skiq_rx_hdl_t)channels.at(0);
+        }
+        else
+        {
+            rx_hdl = skiq_rx_hdl_A1;
+        }
+
 
         SoapySDR_logf(SOAPY_SDR_INFO, "RX handle: %u", rx_hdl);
 
@@ -280,6 +288,7 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
                                            card, status);
             throw std::runtime_error("");
         }
+        SoapySDR_logf(SOAPY_SDR_TRACE, "In rx 3");
         rx_block_size_in_bytes = status;
         rx_block_size_in_words = status / 4;
 
