@@ -16,6 +16,7 @@
 #include <SoapySDR/Types.hpp>
 
 
+#define DEFAULT_CHANNEL 0
 #define DEFAULT_SAMPLE_RATE (20000000)
 #define DEFAULT_BANDWIDTH (18000000)
 #define DEFAULT_FREQUENCY (1000000000)
@@ -103,6 +104,14 @@ class SoapySidekiq : public SoapySDR::Device
 
 
         /*******************************************************************
+         * Antenna API
+         ******************************************************************/
+  
+        std::vector<std::string> listAntennas(const int direction, 
+                const size_t channel  ) const;
+
+
+        /*******************************************************************
          * Frontend corrections API
          ******************************************************************/
 
@@ -120,6 +129,9 @@ class SoapySidekiq : public SoapySDR::Device
          * Gain API
          ******************************************************************/
 
+        std::vector<std::string> listGains(const int direction, 
+                const size_t channel) const;
+
         bool hasGainMode(const int direction,
                 const size_t channel) const;
 
@@ -136,6 +148,10 @@ class SoapySidekiq : public SoapySDR::Device
 
         double getGain(const int direction,
                 const size_t channel) const;
+
+        SoapySDR::Range getGainRange(const int direction,
+                const size_t channel,
+                const std::string & name) const;
 
         SoapySDR::Range getGainRange(const int    direction,
                 const size_t channel) const;

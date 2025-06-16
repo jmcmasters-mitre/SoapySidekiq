@@ -221,6 +221,26 @@ SoapySidekiq::SoapySidekiq(const SoapySDR::Kwargs &args)
     }
     SoapySDR_logf(SOAPY_SDR_TRACE, "channel mode set to single");
 
+    /* set default sample_rate and bandwidth */
+    this->rx_sample_rate = DEFAULT_SAMPLE_RATE;
+    this->tx_sample_rate = DEFAULT_SAMPLE_RATE;
+
+    setSampleRate(SOAPY_SDR_RX, DEFAULT_CHANNEL, static_cast<uint32_t>(this->rx_sample_rate));
+    setSampleRate(SOAPY_SDR_TX, DEFAULT_CHANNEL, static_cast<uint32_t>(this->tx_sample_rate));
+
+    this->rx_bandwidth = DEFAULT_BANDWIDTH;
+    this->tx_bandwidth = DEFAULT_BANDWIDTH;
+
+    setBandwidth(SOAPY_SDR_RX, DEFAULT_CHANNEL, static_cast<uint32_t>(this->rx_bandwidth));
+    setBandwidth(SOAPY_SDR_TX, DEFAULT_CHANNEL, static_cast<uint32_t>(this->tx_bandwidth));
+
+    /* set default frequency */
+    this->rx_center_frequency = DEFAULT_FREQUENCY;
+    setFrequency(SOAPY_SDR_RX, DEFAULT_CHANNEL, static_cast<uint64_t>(this->rx_center_frequency)); 
+
+    this->tx_center_frequency = DEFAULT_FREQUENCY;
+    setFrequency(SOAPY_SDR_TX, DEFAULT_CHANNEL, static_cast<uint64_t>(this->rx_center_frequency)); 
+
     if (args.count("clock_source") > 0) 
     {
         setClockSource(args.at("clock_source"));
@@ -418,6 +438,66 @@ size_t SoapySidekiq::getNumChannels(const int dir) const
 }
 
 /*******************************************************************
+ * Antenna API
+ ******************************************************************/
+
+std::vector<std::string> SoapySidekiq::listAntennas(const int direction, const size_t channel) const {
+    std::vector<std::string> antennas;
+
+    SoapySDR_logf(SOAPY_SDR_TRACE, "listAntennas");
+    
+    if (direction == SOAPY_SDR_RX)
+    {
+        if (channel >= skiq_rx_hdl_end)
+        {
+            antennas.push_back("NONE");
+        }
+        else
+        {
+            if (this->param.rx_param[channel].num_trx_rf_ports > 0)
+            {
+                antennas.push_back("TRX");
+
+            }
+            else if (this->param.rx_param[channel].num_fixed_rf_ports > 0)
+            {
+                antennas.push_back("RX");
+            }
+            else
+            {
+                antennas.push_back("NONE");
+            }
+        }
+    }
+    else if (direction == SOAPY_SDR_TX)
+    {
+        if (channel >= skiq_tx_hdl_end)
+        {
+            antennas.push_back("NONE");
+        }
+        else
+        {
+            if (this->param.tx_param[channel].num_trx_rf_ports > 0)
+            {
+                antennas.push_back("TRX");
+
+            }
+            else if (this->param.tx_param[channel].num_fixed_rf_ports > 0)
+            {
+                antennas.push_back("TX");
+            }
+            else
+            {
+                antennas.push_back("NONE");
+            }
+        }
+    }
+
+
+    return antennas;
+}
+
+/*******************************************************************
  * Frontend corrections API
  ******************************************************************/
 
@@ -552,6 +632,14 @@ bool SoapySidekiq::getDCOffsetMode(const int direction,
 /*******************************************************************
  * Gain API
  ******************************************************************/
+
+std::vector<std::string> SoapySidekiq::listGains(const int direction, const size_t channel) const {
+    //  list available gain elements,
+    std::vector<std::string> results;
+    SoapySDR_logf(SOAPY_SDR_TRACE, "listGains");
+    results.push_back("LNA");
+    return results;
+}
 
 // the Gain API is called for tx attenuation too.
 bool SoapySidekiq::hasGainMode(const int direction, const size_t channel) const
@@ -903,6 +991,15 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
 }
 
 SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
+                                           const size_t channel,
+                                           const std::string & name) const
+{
+    SoapySDR_log(SOAPY_SDR_TRACE, "getGainRange with name");
+    return getGainRange(direction, channel);
+}
+
+
+SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
                                            const size_t channel) const
 {
     SoapySDR_log(SOAPY_SDR_TRACE, "getGainRange");
@@ -911,6 +1008,7 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
     {
         double gain_min = 0;
         double gain_max = 0;
+        double step = 0;
 
 
         // convert index to  dB based upon the card type
@@ -924,6 +1022,7 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
             case skiq_z3u:
                 gain_min = 0;
                 gain_max = 76;
+                step = 1;
                 break;
 
             // 195 to 255 [0 to 30 dB, 0.5 dB/step]
@@ -931,12 +1030,14 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
             case skiq_x4:
                 gain_min = 0;
                 gain_max = 30;
+                step = 0.5;
                 break;
 
             // 187 to 255 [0 to 34 dB, 0.5 dB/step]
             case skiq_nv100:
                 gain_min = 0;
                 gain_max = 34;
+                step = 0.5;
                 break;
 
             default:
@@ -946,12 +1047,13 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
                 break;
         }
 
-        return SoapySDR::Range(gain_min, gain_max);
+        return SoapySDR::Range(gain_min, gain_max, step);
     }
     else if (direction == SOAPY_SDR_TX)
     {
         double attenuation_min = 0;
         double attenuation_max = 0;
+        double attenuation_step = 0;
 
         // convert index to  dB based upon the card type
         switch (part)
@@ -962,12 +1064,14 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
             case skiq_z2:
             case skiq_z3u:
                 attenuation_max = 89.75;
+                attenuation_step = 0.25;
                 break;
 
             case skiq_x2:
             case skiq_x4:
             case skiq_nv100:
                 attenuation_max = 41.75;
+                attenuation_step = 0.25;
                 break;
 
             default:
@@ -976,7 +1080,7 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
                               card, (uint8_t)part);
                 break;
         }
-        return SoapySDR::Range(attenuation_min, attenuation_max);
+        return SoapySDR::Range(attenuation_min, attenuation_max, attenuation_step);
     }
     else
     {

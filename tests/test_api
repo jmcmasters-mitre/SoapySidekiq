@@ -54,6 +54,9 @@ def do_frontend(sdr, handle):
 
 
 def do_gain(sdr, handle):
+    gains = sdr.listGains(SOAPY_SDR_RX, handle)
+    print(f"\t list_gains: {gains}")
+
     #  *** Gain API
     gain_mode = sdr.hasGainMode(SOAPY_SDR_RX, handle)
     print(f"\t has gain mode is: {gain_mode}")
@@ -96,6 +99,12 @@ def do_gain(sdr, handle):
     print(f"\tgain range max {gain_range.maximum()}")
     print(f"\tgain range min {gain_range.minimum()}")
     print(f"\tgain range step {gain_range.step()}")
+
+    # get the rx gain range
+    gain_range_name = sdr.getGainRange(SOAPY_SDR_RX, handle, 'LNA')
+    print(f"\tgain range name max {gain_range_name.maximum()}")
+    print(f"\tgain range name min {gain_range_name.minimum()}")
+    print(f"\tgain range name step {gain_range_name.step()}")
 
     # get the tx attenuation range
     gain_range = sdr.getGainRange(SOAPY_SDR_TX, handle)
@@ -367,6 +376,17 @@ def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
     do_frequency(sdr, handle)
     user_input = input("Press any key to continue")
 
+    
+    antennas = sdr.listAntennas(SOAPY_SDR_RX, handle)
+    print(f"Antennas: {antennas})")
+
+    antennas = sdr.listAntennas(SOAPY_SDR_TX, handle)
+    print(f"Antennas: {antennas})")
+
+    #  *** Gain API
+    do_gain(sdr, handle)
+    user_input = input("Press any key to continue")
+
     #  *** Frontend Corrections API
     do_frontend(sdr, handle)
 
@@ -385,9 +405,6 @@ def main(cardno, serial, handle, rate, bw, freq, gain, num_blocks, file_name):
     user_input = input("Press any key to continue")
     do_sensors(sdr, handle)
 
-    #  *** Gain API
-    do_gain(sdr, handle)
-    user_input = input("Press any key to continue")
 
 
 def parse_command_line_arguments():
