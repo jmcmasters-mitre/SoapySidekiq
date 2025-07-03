@@ -748,85 +748,71 @@ int SoapySidekiq::readStream(
     const long timeoutUs)
 {
     if (stream != RX_STREAM)
-    {
         return SOAPY_SDR_NOT_SUPPORTED;
-    }
     else if (rx_receive_operation_exited_due_to_error)
-    {
         return SOAPY_SDR_STREAM_ERROR;
-    }
-
-    // ---- Enforce that client must read multiples of RX block size (like gr-sidekiq) ----
-    if (numElems % rx_payload_size_in_words != 0)
-    {
-        SoapySDR_logf(SOAPY_SDR_ERROR,
-            "numElems must be a multiple of the RX block size numElems %zu, block size %u",
-            numElems, rx_payload_size_in_words);
-        throw std::runtime_error("");
-    }
 
     long waitTime = timeoutUs;
     if (waitTime == 0)
         waitTime = SLEEP_1SEC;
 
-    // Wait for enough blocks
-    size_t blocks_needed = numElems / rx_payload_size_in_words;
-    size_t blocks_read = 0;
-    char *buff_ptr = (char *)buffs[0];
+    // Only copy as many full hardware blocks as possible.
+    size_t max_blocks = numElems / rx_payload_size_in_words;
+    if (max_blocks == 0)
+        return 0; // Can't return partial block, return 0 samples.
 
-    while (blocks_read < blocks_needed)
+    char *buff_ptr = (char *)buffs[0];
+    size_t samples_written = 0;
+
+    for (size_t block = 0; block < max_blocks; ++block)
     {
+        // Wait for a block to become available
         while ((rxReadIndex == rxWriteIndex) && (waitTime > 0))
         {
             usleep(DEFAULT_SLEEP_US);
             waitTime -= DEFAULT_SLEEP_US;
         }
         if (waitTime <= 0)
-        {
-            SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out");
-            return SOAPY_SDR_TIMEOUT;
-        }
+            return samples_written > 0 ? samples_written : SOAPY_SDR_TIMEOUT;
 
         skiq_rx_block_t *block_ptr = p_rx_block[rxReadIndex];
-        volatile int16_t *src = reinterpret_cast<volatile int16_t *>(block_ptr->data);
-        char *ringbuffer_ptr = (char *)((char *)block_ptr->data);
+        char *ringbuffer_ptr = (char *)block_ptr->data;
 
-        // Timestamp reporting (use first block's timestamp)
-        if (blocks_read == 0)
+        // Timestamp: use first block's timestamp
+        if (block == 0)
         {
-            if (this->rfTimeSource == true)
+            if (this->rfTimeSource)
                 timeNs = convert_timestamp_to_nanos(block_ptr->rf_timestamp, rx_sample_rate);
             else
                 timeNs = convert_timestamp_to_nanos(block_ptr->sys_timestamp, sys_freq);
             flags = SOAPY_SDR_HAS_TIME;
         }
 
-        // Copy block
+        // Copy block data
         if (rxUseShort)
         {
-            // For CS16 format, just memcpy (volatile is safe to read in memcpy)
-            memcpy(buff_ptr, (const void *)ringbuffer_ptr, rx_payload_size_in_bytes);
+            memcpy(buff_ptr, ringbuffer_ptr, rx_payload_size_in_bytes);
         }
         else
         {
-            // For CF32 (float), convert and deinterleave
             float *dbuff_ptr = (float *)buff_ptr;
+            int16_t *source = (int16_t *)ringbuffer_ptr;
             int short_ctr = 0;
             for (size_t i = 0; i < rx_payload_size_in_words; i++)
             {
-                *dbuff_ptr++ = (float)src[short_ctr + 1] / this->maxValue;
-                *dbuff_ptr++ = (float)src[short_ctr] / this->maxValue;
+                *dbuff_ptr++ = (float)source[short_ctr + 1] / this->maxValue;
+                *dbuff_ptr++ = (float)source[short_ctr] / this->maxValue;
                 short_ctr += 2;
             }
         }
 
         buff_ptr += rx_payload_size_in_bytes;
         rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
-        blocks_read++;
+        samples_written += rx_payload_size_in_words;
     }
 
-    // NumElems samples have been written to user's buffer
-    return numElems;
+    // Return how many samples were actually written
+    return samples_written;
 }
 
 int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
