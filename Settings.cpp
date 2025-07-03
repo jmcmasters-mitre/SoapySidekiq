@@ -1526,6 +1526,28 @@ void SoapySidekiq::setBandwidth(const int direction, const size_t channel,
     }
 }
 
+std::vector<double> SoapySidekiq::listSampleRates(const int direction, const size_t channel) const {
+  std::vector<double> results;
+
+  uint32_t min_sample_rate;
+  if (skiq_read_min_sample_rate(card, &min_sample_rate) != 0) {
+    SoapySDR_logf(SOAPY_SDR_ERROR, "Failure: skiq_read_min_sample_rate (card %d)", card);
+  }
+  uint32_t max_sample_rate;
+  if (skiq_read_max_sample_rate(card, &max_sample_rate) != 0) {
+    SoapySDR_logf(SOAPY_SDR_ERROR, "Failure: skiq_read_min_sample_rate (card %d)", card);
+  }
+
+  //  iterate through all sample rates
+  uint32_t sample_rate = min_sample_rate;
+  while (sample_rate <= max_sample_rate) {
+    results.push_back(sample_rate);
+    sample_rate += 250000;
+  }
+
+  return results;
+}
+
 double SoapySidekiq::getBandwidth(const int    direction,
                                   const size_t channel) const
 {
