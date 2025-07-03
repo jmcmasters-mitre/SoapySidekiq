@@ -748,45 +748,52 @@ int SoapySidekiq::readStream(
     const long timeoutUs)
 {
     if (stream != RX_STREAM)
+    {
         return SOAPY_SDR_NOT_SUPPORTED;
+    }
     else if (rx_receive_operation_exited_due_to_error)
+    {
         return SOAPY_SDR_STREAM_ERROR;
-
-    int16_t *output = static_cast<int16_t *>(buffs[0]);
-    size_t totalCopied = 0;
-    long waitTime = (timeoutUs == 0) ? SLEEP_1SEC : timeoutUs;
-
-    // 1. Drain from FIFO buffer if there is leftover data from previous read
-    while (!rx_fifo_buffer.empty() && totalCopied < numElems) {
-        output[totalCopied++] = rx_fifo_buffer[rx_fifo_offset++];
-        if (rx_fifo_offset >= rx_fifo_buffer.size()) {
-            rx_fifo_buffer.clear();
-            rx_fifo_offset = 0;
-        }
     }
 
-    // 2. If we've satisfied the request, return
-    if (totalCopied == numElems)
-        return numElems;
+    // ---- Enforce that client must read multiples of RX block size (like gr-sidekiq) ----
+    if (numElems % rx_payload_size_in_words != 0)
+    {
+        SoapySDR_logf(SOAPY_SDR_ERROR,
+            "numElems must be a multiple of the RX block size numElems %zu, block size %u",
+            numElems, rx_payload_size_in_words);
+        throw std::runtime_error("");
+    }
 
-    // 3. Otherwise, fetch more blocks from the hardware ring buffer
-    while (totalCopied < numElems) {
-        // Wait for data to be available
-        while (rxReadIndex == rxWriteIndex && waitTime > 0) {
+    long waitTime = timeoutUs;
+    if (waitTime == 0)
+        waitTime = SLEEP_1SEC;
+
+    // Wait for enough blocks
+    size_t blocks_needed = numElems / rx_payload_size_in_words;
+    size_t blocks_read = 0;
+    char *buff_ptr = (char *)buffs[0];
+
+    while (blocks_read < blocks_needed)
+    {
+        while ((rxReadIndex == rxWriteIndex) && (waitTime > 0))
+        {
             usleep(DEFAULT_SLEEP_US);
             waitTime -= DEFAULT_SLEEP_US;
         }
-        if (waitTime <= 0) {
+        if (waitTime <= 0)
+        {
             SoapySDR_log(SOAPY_SDR_DEBUG, "readStream timed out");
-            return (totalCopied > 0) ? totalCopied : SOAPY_SDR_TIMEOUT;
+            return SOAPY_SDR_TIMEOUT;
         }
 
         skiq_rx_block_t *block_ptr = p_rx_block[rxReadIndex];
-        int16_t *src = reinterpret_cast<int16_t *>(block_ptr->data);
-        size_t samplesInBlock = rx_payload_size_in_bytes / sizeof(int16_t);
+        volatile int16_t *src = reinterpret_cast<volatile int16_t *>(block_ptr->data);
+        char *ringbuffer_ptr = (char *)((char *)block_ptr->data);
 
-        // Set timeNs and flags for the very first sample returned
-        if (totalCopied == 0) {
+        // Timestamp reporting (use first block's timestamp)
+        if (blocks_read == 0)
+        {
             if (this->rfTimeSource == true)
                 timeNs = convert_timestamp_to_nanos(block_ptr->rf_timestamp, rx_sample_rate);
             else
@@ -794,26 +801,32 @@ int SoapySidekiq::readStream(
             flags = SOAPY_SDR_HAS_TIME;
         }
 
-        // How many can we copy directly?
-        size_t needed = numElems - totalCopied;
-        if (needed >= samplesInBlock) {
-            // Copy full block
-            memcpy(&output[totalCopied], src, samplesInBlock * sizeof(int16_t));
-            totalCopied += samplesInBlock;
-        } else {
-            // Copy partial block, save remainder for next call
-            memcpy(&output[totalCopied], src, needed * sizeof(int16_t));
-            // Save the leftovers in the FIFO buffer
-            rx_fifo_buffer.assign(&src[needed], &src[samplesInBlock]);
-            rx_fifo_offset = 0;
-            totalCopied += needed;
+        // Copy block
+        if (rxUseShort)
+        {
+            // For CS16 format, just memcpy (volatile is safe to read in memcpy)
+            memcpy(buff_ptr, (const void *)ringbuffer_ptr, rx_payload_size_in_bytes);
+        }
+        else
+        {
+            // For CF32 (float), convert and deinterleave
+            float *dbuff_ptr = (float *)buff_ptr;
+            int short_ctr = 0;
+            for (size_t i = 0; i < rx_payload_size_in_words; i++)
+            {
+                *dbuff_ptr++ = (float)src[short_ctr + 1] / this->maxValue;
+                *dbuff_ptr++ = (float)src[short_ctr] / this->maxValue;
+                short_ctr += 2;
+            }
         }
 
-        // Move to the next buffer in the ring
+        buff_ptr += rx_payload_size_in_bytes;
         rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
+        blocks_read++;
     }
 
-    return totalCopied;
+    // NumElems samples have been written to user's buffer
+    return numElems;
 }
 
 int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
