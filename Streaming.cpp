@@ -747,37 +747,53 @@ int SoapySidekiq::readStream(
     long long &timeNs,
     const long timeoutUs)
 {
-    if (stream != RX_STREAM)
-        return SOAPY_SDR_NOT_SUPPORTED;
-    else if (rx_receive_operation_exited_due_to_error)
-        return SOAPY_SDR_STREAM_ERROR;
+    if (stream != RX_STREAM) return SOAPY_SDR_NOT_SUPPORTED;
+    if (rx_receive_operation_exited_due_to_error) return SOAPY_SDR_STREAM_ERROR;
 
     long waitTime = timeoutUs;
-    if (waitTime == 0)
-        waitTime = SLEEP_1SEC;
+    if (waitTime == 0) waitTime = SLEEP_1SEC;
 
-    char *buff_ptr = (char *)buffs[0];
-    size_t samples_written = 0;
+    int16_t *out_ptr = (int16_t *)buffs[0];
+    size_t samples_done = 0;
     bool timestamp_set = false;
 
-    while (samples_written < numElems)
+    while (samples_done < numElems)
     {
-        // Wait for buffer to be available
+        // 1. Use any leftover data in our FIFO buffer
+        if (rx_fifo_offset < rx_fifo_buffer.size())
+        {
+            size_t available = rx_fifo_buffer.size() - rx_fifo_offset;
+            size_t to_copy = std::min(available, numElems - samples_done);
+            memcpy(out_ptr, &rx_fifo_buffer[rx_fifo_offset], to_copy * sizeof(int16_t));
+            rx_fifo_offset += to_copy;
+            out_ptr += to_copy;
+            samples_done += to_copy;
+
+            // If we consumed all FIFO data, clear the buffer
+            if (rx_fifo_offset >= rx_fifo_buffer.size())
+            {
+                rx_fifo_buffer.clear();
+                rx_fifo_offset = 0;
+            }
+            continue;
+        }
+
+        // 2. Wait for a new block from ring buffer
         while ((rxReadIndex == rxWriteIndex) && (waitTime > 0))
         {
             usleep(DEFAULT_SLEEP_US);
             waitTime -= DEFAULT_SLEEP_US;
         }
         if (waitTime <= 0)
-            return samples_written > 0 ? samples_written : SOAPY_SDR_TIMEOUT;
+        {
+            return samples_done > 0 ? samples_done : SOAPY_SDR_TIMEOUT;
+        }
 
         skiq_rx_block_t *block_ptr = p_rx_block[rxReadIndex];
-        char *ringbuffer_ptr = (char *)block_ptr->data;
+        int16_t *block_data = (int16_t *)block_ptr->data;
+        size_t block_samples = rx_payload_size_in_words * 2; // I+Q, so *2
 
-        size_t block_samples = rx_payload_size_in_words;
-        size_t samples_left = numElems - samples_written;
-        size_t copy_samples = std::min(block_samples, samples_left);
-
+        // 3. Optionally set timestamp
         if (!timestamp_set)
         {
             if (this->rfTimeSource)
@@ -788,34 +804,35 @@ int SoapySidekiq::readStream(
             timestamp_set = true;
         }
 
-        if (rxUseShort)
-        {
-            memcpy(buff_ptr, ringbuffer_ptr, copy_samples * sizeof(int16_t) * 2);
-        }
-        else
-        {
-            float *dbuff_ptr = (float *)buff_ptr;
-            int16_t *source = (int16_t *)ringbuffer_ptr;
-            int short_ctr = 0;
-            for (size_t i = 0; i < copy_samples; i++)
-            {
-                *dbuff_ptr++ = (float)source[short_ctr + 1] / this->maxValue;
-                *dbuff_ptr++ = (float)source[short_ctr] / this->maxValue;
-                short_ctr += 2;
-            }
-        }
+        size_t needed = numElems - samples_done;
 
-        buff_ptr += copy_samples * sizeof(int16_t) * 2;
-        samples_written += copy_samples;
+        if (needed >= block_samples)
+        {
+            // Copy full block directly
+            memcpy(out_ptr, block_data, block_samples * sizeof(int16_t));
+            out_ptr += block_samples;
+            samples_done += block_samples;
 
-        // If we consumed the whole block, advance ring index
-        if (copy_samples == block_samples)
+            // Advance ring buffer
             rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
+        }
         else
-            break; // Only partially consumed, will get the rest next call
-    }
+        {
+            // Not enough space: copy what we can, stash the rest for next call
+            memcpy(out_ptr, block_data, needed * sizeof(int16_t));
+            out_ptr += needed;
+            samples_done += needed;
 
-    return samples_written;
+            // Store leftovers in FIFO buffer
+            rx_fifo_buffer.resize(block_samples - needed);
+            memcpy(rx_fifo_buffer.data(), block_data + needed, (block_samples - needed) * sizeof(int16_t));
+            rx_fifo_offset = 0;
+
+            // Advance ring buffer
+            rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
+        }
+    }
+    return samples_done;
 }
 
 int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
