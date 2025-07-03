@@ -754,23 +754,25 @@ int SoapySidekiq::readStream(
     if (waitTime == 0) waitTime = SLEEP_1SEC;
 
     int16_t *out_ptr = (int16_t *)buffs[0];
-    size_t samples_done = 0;
+    size_t samples_done = 0; // number of *complex* samples
     bool timestamp_set = false;
 
     while (samples_done < numElems)
     {
-        // 1. Use any leftover data in our FIFO buffer
-        if (rx_fifo_offset < rx_fifo_buffer.size())
+        // 1. FIFO buffer for leftovers (in complex samples)
+        size_t fifo_complex = rx_fifo_buffer.size() / 2 - rx_fifo_offset;
+        if (fifo_complex > 0)
         {
-            size_t available = rx_fifo_buffer.size() - rx_fifo_offset;
-            size_t to_copy = std::min(available, numElems - samples_done);
-            memcpy(out_ptr, &rx_fifo_buffer[rx_fifo_offset], to_copy * sizeof(int16_t));
+            size_t to_copy = std::min(fifo_complex, numElems - samples_done);
+            memcpy(
+                out_ptr,
+                rx_fifo_buffer.data() + rx_fifo_offset * 2,
+                to_copy * 2 * sizeof(int16_t));
             rx_fifo_offset += to_copy;
-            out_ptr += to_copy;
+            out_ptr += to_copy * 2;
             samples_done += to_copy;
 
-            // If we consumed all FIFO data, clear the buffer
-            if (rx_fifo_offset >= rx_fifo_buffer.size())
+            if (rx_fifo_offset * 2 >= rx_fifo_buffer.size())
             {
                 rx_fifo_buffer.clear();
                 rx_fifo_offset = 0;
@@ -778,7 +780,7 @@ int SoapySidekiq::readStream(
             continue;
         }
 
-        // 2. Wait for a new block from ring buffer
+        // 2. Wait for new block from ring buffer
         while ((rxReadIndex == rxWriteIndex) && (waitTime > 0))
         {
             usleep(DEFAULT_SLEEP_US);
@@ -791,9 +793,8 @@ int SoapySidekiq::readStream(
 
         skiq_rx_block_t *block_ptr = p_rx_block[rxReadIndex];
         int16_t *block_data = (int16_t *)block_ptr->data;
-        size_t block_samples = rx_payload_size_in_words * 2; // I+Q, so *2
+        size_t block_complex = rx_payload_size_in_words; // hardware gives complex samples
 
-        // 3. Optionally set timestamp
         if (!timestamp_set)
         {
             if (this->rfTimeSource)
@@ -806,33 +807,26 @@ int SoapySidekiq::readStream(
 
         size_t needed = numElems - samples_done;
 
-        if (needed >= block_samples)
+        if (needed >= block_complex)
         {
-            // Copy full block directly
-            memcpy(out_ptr, block_data, block_samples * sizeof(int16_t));
-            out_ptr += block_samples;
-            samples_done += block_samples;
-
-            // Advance ring buffer
+            memcpy(out_ptr, block_data, block_complex * 2 * sizeof(int16_t));
+            out_ptr += block_complex * 2;
+            samples_done += block_complex;
             rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
         }
         else
         {
-            // Not enough space: copy what we can, stash the rest for next call
-            memcpy(out_ptr, block_data, needed * sizeof(int16_t));
-            out_ptr += needed;
+            memcpy(out_ptr, block_data, needed * 2 * sizeof(int16_t));
+            out_ptr += needed * 2;
             samples_done += needed;
-
-            // Store leftovers in FIFO buffer
-            rx_fifo_buffer.resize(block_samples - needed);
-            memcpy(rx_fifo_buffer.data(), block_data + needed, (block_samples - needed) * sizeof(int16_t));
+            // Store remaining complex samples (not int16_t!) in FIFO buffer
+            rx_fifo_buffer.resize((block_complex - needed) * 2);
+            memcpy(rx_fifo_buffer.data(), block_data + needed * 2, (block_complex - needed) * 2 * sizeof(int16_t));
             rx_fifo_offset = 0;
-
-            // Advance ring buffer
             rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
         }
     }
-    return samples_done;
+    return samples_done; // Return number of *complex* samples
 }
 
 int SoapySidekiq::writeStream(SoapySDR::Stream * stream,
