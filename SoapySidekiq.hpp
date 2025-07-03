@@ -308,6 +308,10 @@ class SoapySidekiq : public SoapySDR::Device
         uint32_t rxReadIndex{};
         uint32_t rxWriteIndex{};
 
+        // Buffer for leftover RX samples to allow readStream() to return arbitrary numElems
+        std::vector<int16_t> rx_fifo_buffer;
+        size_t rx_fifo_offset = 0;
+
         // TX buffer
         skiq_tx_block_t *p_tx_block[DEFAULT_NUM_BUFFERS];
         uint32_t currTXBuffIndex{};
