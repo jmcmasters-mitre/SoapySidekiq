@@ -756,17 +756,13 @@ int SoapySidekiq::readStream(
     if (waitTime == 0)
         waitTime = SLEEP_1SEC;
 
-    // Only copy as many full hardware blocks as possible.
-    size_t max_blocks = numElems / rx_payload_size_in_words;
-    if (max_blocks == 0)
-        return 0; // Can't return partial block, return 0 samples.
-
     char *buff_ptr = (char *)buffs[0];
     size_t samples_written = 0;
+    bool timestamp_set = false;
 
-    for (size_t block = 0; block < max_blocks; ++block)
+    while (samples_written < numElems)
     {
-        // Wait for a block to become available
+        // Wait for buffer to be available
         while ((rxReadIndex == rxWriteIndex) && (waitTime > 0))
         {
             usleep(DEFAULT_SLEEP_US);
@@ -778,27 +774,30 @@ int SoapySidekiq::readStream(
         skiq_rx_block_t *block_ptr = p_rx_block[rxReadIndex];
         char *ringbuffer_ptr = (char *)block_ptr->data;
 
-        // Timestamp: use first block's timestamp
-        if (block == 0)
+        size_t block_samples = rx_payload_size_in_words;
+        size_t samples_left = numElems - samples_written;
+        size_t copy_samples = std::min(block_samples, samples_left);
+
+        if (!timestamp_set)
         {
             if (this->rfTimeSource)
                 timeNs = convert_timestamp_to_nanos(block_ptr->rf_timestamp, rx_sample_rate);
             else
                 timeNs = convert_timestamp_to_nanos(block_ptr->sys_timestamp, sys_freq);
             flags = SOAPY_SDR_HAS_TIME;
+            timestamp_set = true;
         }
 
-        // Copy block data
         if (rxUseShort)
         {
-            memcpy(buff_ptr, ringbuffer_ptr, rx_payload_size_in_bytes);
+            memcpy(buff_ptr, ringbuffer_ptr, copy_samples * sizeof(int16_t) * 2);
         }
         else
         {
             float *dbuff_ptr = (float *)buff_ptr;
             int16_t *source = (int16_t *)ringbuffer_ptr;
             int short_ctr = 0;
-            for (size_t i = 0; i < rx_payload_size_in_words; i++)
+            for (size_t i = 0; i < copy_samples; i++)
             {
                 *dbuff_ptr++ = (float)source[short_ctr + 1] / this->maxValue;
                 *dbuff_ptr++ = (float)source[short_ctr] / this->maxValue;
@@ -806,12 +805,16 @@ int SoapySidekiq::readStream(
             }
         }
 
-        buff_ptr += rx_payload_size_in_bytes;
-        rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
-        samples_written += rx_payload_size_in_words;
+        buff_ptr += copy_samples * sizeof(int16_t) * 2;
+        samples_written += copy_samples;
+
+        // If we consumed the whole block, advance ring index
+        if (copy_samples == block_samples)
+            rxReadIndex = (rxReadIndex + 1) % DEFAULT_NUM_BUFFERS;
+        else
+            break; // Only partially consumed, will get the rest next call
     }
 
-    // Return how many samples were actually written
     return samples_written;
 }
 
