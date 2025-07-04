@@ -823,7 +823,6 @@ void SoapySidekiq::setGain(const int direction, const size_t channel, const doub
         SoapySDR_logf(SOAPY_SDR_INFO,
             "Set RX gain to: %.1f dB (gain index: %u)", value, gain_index);
     }
-}
 
     /* For TX gain is attenuation 
      * so a gain of 0 is max attenuation_index. A large gain, is a smaller attenuation index */
