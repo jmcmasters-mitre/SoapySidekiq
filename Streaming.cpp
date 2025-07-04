@@ -673,11 +673,19 @@ int SoapySidekiq::deactivateStream(SoapySDR::Stream *stream, const int flags,
             status = skiq_stop_rx_streaming_on_1pps(card, rx_hdl, 0);
             if (status != 0)
             {
-                SoapySDR_logf(SOAPY_SDR_ERROR,
-                        "skiq_stop_rx_streaming_on_1pps failed, (card %u) handle "
-                        "%d, status %d",
+                if (status == -19) // Handle not streaming
+                {
+                    SoapySDR_logf(SOAPY_SDR_WARNING,
+                        "skiq_stop_rx_streaming_on_1pps: handle not streaming (card %u, handle %d), ignoring",
+                        card, rx_hdl);
+                }
+                else
+                {
+                    SoapySDR_logf(SOAPY_SDR_ERROR,
+                        "skiq_stop_rx_streaming_on_1pps failed, (card %u) handle %d, status %d",
                         card, rx_hdl, status);
-                throw std::runtime_error("");
+                    throw std::runtime_error("");
+                }
             }
         }
         else
@@ -685,11 +693,19 @@ int SoapySidekiq::deactivateStream(SoapySDR::Stream *stream, const int flags,
             status = skiq_stop_rx_streaming(card, rx_hdl);
             if (status != 0)
             {
-                SoapySDR_logf(SOAPY_SDR_ERROR,
-                        "skiq_stop_rx_streaming failed, (card %u) handle "
-                        "%d, status %d",
+                if (status == -19) // Handle not streaming
+                {
+                    SoapySDR_logf(SOAPY_SDR_WARNING,
+                        "skiq_stop_rx_streaming: handle not streaming (card %u, handle %d), ignoring",
+                        card, rx_hdl);
+                }
+                else
+                {
+                    SoapySDR_logf(SOAPY_SDR_ERROR,
+                        "skiq_stop_rx_streaming failed, (card %u) handle %d, status %d",
                         card, rx_hdl, status);
-                throw std::runtime_error("");
+                    throw std::runtime_error("");
+                }
             }
         }
 
@@ -707,11 +723,19 @@ int SoapySidekiq::deactivateStream(SoapySDR::Stream *stream, const int flags,
             status = skiq_stop_tx_streaming_on_1pps(card, tx_hdl, 0);
             if (status != 0)
             {
-                SoapySDR_logf(
-                        SOAPY_SDR_ERROR,
+                if (status == -19)
+                {
+                    SoapySDR_logf(SOAPY_SDR_WARNING,
+                        "skiq_stop_tx_streaming_on_1pps: handle not streaming (card %u, handle %d), ignoring",
+                        card, tx_hdl);
+                }
+                else
+                {
+                    SoapySDR_logf(SOAPY_SDR_ERROR,
                         "skiq_stop_tx_streaming_on_1pps failed (card %u), status %d",
                         card, status);
-                throw std::runtime_error("");
+                    throw std::runtime_error("");
+                }
             }
 
             /* verify the tx thread is done */
@@ -726,14 +750,21 @@ int SoapySidekiq::deactivateStream(SoapySDR::Stream *stream, const int flags,
             status = skiq_stop_tx_streaming(card, tx_hdl);
             if (status != 0)
             {
-                SoapySDR_logf(
-                        SOAPY_SDR_ERROR,
+                if (status == -19)
+                {
+                    SoapySDR_logf(SOAPY_SDR_WARNING,
+                        "skiq_stop_tx_streaming: handle not streaming (card %u, handle %d), ignoring",
+                        card, tx_hdl);
+                }
+                else
+                {
+                    SoapySDR_logf(SOAPY_SDR_ERROR,
                         "skiq_stop_tx_streaming failed (card %u), status %d",
                         card, status);
-                throw std::runtime_error("");
+                    throw std::runtime_error("");
+                }
             }
         }
-
     }
 
     return 0;
