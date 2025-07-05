@@ -726,6 +726,11 @@ bool SoapySidekiq::getGainMode(const int direction, const size_t channel) const
     return false;
 }
 
+void SoapySidekiq::setGain(const int direction, const size_t channel, const std::string &name, const double value)
+{
+    setGain(direction, channel, value);
+}
+
 void SoapySidekiq::setGain(const int direction, const size_t channel, const double value)
 {
     int status = 0;
@@ -869,6 +874,11 @@ void SoapySidekiq::setGain(const int direction, const size_t channel, const doub
         SoapySDR_logf(SOAPY_SDR_ERROR, "invalid direction %d", direction);
         throw std::runtime_error("");
     }
+}
+
+double SoapySidekiq::getGain(const int direction, const size_t channel, const std::string &name) const
+{
+    return getGain(direction, channel);
 }
 
 double SoapySidekiq::getGain(const int direction, const size_t channel) const
