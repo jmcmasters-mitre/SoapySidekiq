@@ -243,8 +243,6 @@ void SoapySidekiq::rx_receive_operation_impl(void)
         }
         
     }
-
-    SoapySDR_log(SOAPY_SDR_INFO, "Exiting RX Sidekiq Thread");
 }
 
 /*******************************************************************
