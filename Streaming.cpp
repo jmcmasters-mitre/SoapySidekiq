@@ -126,7 +126,6 @@ void SoapySidekiq::rx_receive_operation(void)
     try
     {
         rx_receive_operation_impl();
-        SoapySDR_log(SOAPY_SDR_INFO, "Exiting RX Sidekiq Thread");
     }
     catch (const std::exception&)
     {
@@ -154,10 +153,6 @@ void SoapySidekiq::rx_receive_operation_impl(void)
 
     // wait till called to start running
     _cv.wait(lock, [this] { return rx_start_signal; });
-
-    SoapySDR_log(SOAPY_SDR_INFO, "Starting RX Sidekiq Thread loop");
-    SoapySDR_logf(SOAPY_SDR_TRACE, "readIndex %u, writeIndex %u", 
-            rxReadIndex, rxWriteIndex);
 
     //  loop until stream is deactivated
     while (rx_running)
@@ -230,6 +225,10 @@ void SoapySidekiq::rx_receive_operation_impl(void)
 
                 rxWriteIndex = (rxWriteIndex + 1) % DEFAULT_NUM_BUFFERS;
             }
+        }
+        else if (status == skiq_rx_status_error_overrun)
+        {
+            SoapySDR_logf(SOAPY_SDR_WARNING, "overrun detected, (card %u)", card);
         }
         else
         {
@@ -512,8 +511,6 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
         //  start the receive thread
         if (!_rx_receive_thread.joinable())
         {
-            SoapySDR_logf(SOAPY_SDR_INFO, "Start RX thread");
-
             rx_running = true;
             rx_start_signal = false;
 
