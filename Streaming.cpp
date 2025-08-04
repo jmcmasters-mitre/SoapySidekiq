@@ -126,7 +126,6 @@ void SoapySidekiq::rx_receive_operation(void)
     try
     {
         rx_receive_operation_impl();
-        SoapySDR_log(SOAPY_SDR_INFO, "Exiting RX Sidekiq Thread");
     }
     catch (const std::exception&)
     {
@@ -152,12 +151,8 @@ void SoapySidekiq::rx_receive_operation_impl(void)
 
     std::unique_lock<std::mutex> lock(rx_mutex);
 
-    SoapySDR_log(SOAPY_SDR_TRACE, "entering rx_receive_thread");
-
     // wait till called to start running
     _cv.wait(lock, [this] { return rx_start_signal; });
-
-    SoapySDR_log(SOAPY_SDR_INFO, "Starting RX Sidekiq Thread loop");
 
     //  loop until stream is deactivated
     while (rx_running)
@@ -231,6 +226,10 @@ void SoapySidekiq::rx_receive_operation_impl(void)
                 rxWriteIndex = (rxWriteIndex + 1) % DEFAULT_NUM_BUFFERS;
             }
         }
+        else if (status == skiq_rx_status_error_overrun)
+        {
+            SoapySDR_logf(SOAPY_SDR_WARNING, "overrun detected, (card %u)", card);
+        }
         else
         {
             if (status != skiq_rx_status_no_data)
@@ -243,8 +242,6 @@ void SoapySidekiq::rx_receive_operation_impl(void)
         }
         
     }
-
-    SoapySDR_log(SOAPY_SDR_INFO, "Exiting RX Sidekiq Thread");
 }
 
 /*******************************************************************
@@ -357,6 +354,30 @@ SoapySDR::Stream *SoapySidekiq::setupStream(const int direction,
             throw std::runtime_error("");
         }
         SoapySDR_logf(SOAPY_SDR_INFO, "System Timestamp Freq: %llu", this->sys_freq);
+
+        /* set rx source as iq data */
+        if (iq_swap == true)
+        {
+            status = skiq_write_iq_order_mode(card, skiq_iq_order_iq);
+            if (status != 0)
+            {
+                SoapySDR_logf(SOAPY_SDR_ERROR,
+                             "skiq_write_rx_data_src failed (card %u) status %d",
+                              card, status);
+                throw std::runtime_error("");
+            }
+            SoapySDR_logf(SOAPY_SDR_INFO, "RX is set to I then Q order");
+        }
+
+        /* set a modest rx timeout to make skiq_receive blocking*/
+        status = skiq_set_rx_transfer_timeout(card, 100000);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                          "skiq_set_rx_transfer_timeout failed, (card %u) status %d",
+                          card, status);
+            throw std::runtime_error("");
+        }
 
         return RX_STREAM;
     }
@@ -484,36 +505,12 @@ int SoapySidekiq::activateStream(SoapySDR::Stream *stream,
 
     if (stream == RX_STREAM)
     {
-
-        /* set rx source as iq data */
-        if (iq_swap == true)
-        {
-            status = skiq_write_iq_order_mode(card, skiq_iq_order_iq);
-            if (status != 0)
-            {
-                SoapySDR_logf(SOAPY_SDR_ERROR,
-                             "skiq_write_rx_data_src failed (card %u) status %d",
-                              card, status);
-                throw std::runtime_error("");
-            }
-            SoapySDR_logf(SOAPY_SDR_INFO, "RX is set to I then Q order");
-        }
-
-        /* set a modest rx timeout to make skiq_receive blocking*/
-        status = skiq_set_rx_transfer_timeout(card, 100000);
-        if (status != 0)
-        {
-            SoapySDR_logf(SOAPY_SDR_ERROR,
-                          "skiq_set_rx_transfer_timeout failed, (card %u) status %d",
-                          card, status);
-            throw std::runtime_error("");
-        }
+        rxWriteIndex = 0;
+        rxReadIndex  = 0;
 
         //  start the receive thread
         if (!_rx_receive_thread.joinable())
         {
-            SoapySDR_logf(SOAPY_SDR_INFO, "Start RX thread");
-
             rx_running = true;
             rx_start_signal = false;
 
