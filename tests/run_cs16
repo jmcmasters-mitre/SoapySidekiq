@@ -37,13 +37,12 @@ def getBlocks(N, rx_stream):
 
     getBlockId = threading.get_native_id()
     write_idx = 0
+    buff = np.empty(2*N, dtype=np.int16)
 
     while running:
         if DEBUG:
             print("getBlock", idx)
 
-        buff = np.empty(2*N, dtype=np.int16)
-#        sr = sdr.readStream(rx_stream, [buff], N)
         sr = sdr.readStream(rx_stream, [buff], N, timeoutUs=200000)
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc

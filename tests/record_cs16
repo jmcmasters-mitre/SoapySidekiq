@@ -35,6 +35,7 @@ sample_queue = []
 def getBlocks(N, rx_stream):
     global running, sample_queue, max_qsize, getBlockId, write_idx
 
+    buff = np.empty(2*N, dtype=np.int16)
     getBlockId = threading.get_native_id()
     write_idx = 0
 
@@ -42,8 +43,6 @@ def getBlocks(N, rx_stream):
         if DEBUG:
             print("getBlock", idx)
 
-        buff = np.empty(2*N, dtype=np.int16)
-#        sr = sdr.readStream(rx_stream, [buff], N)
         sr = sdr.readStream(rx_stream, [buff], N, timeoutUs=200000)
         rc = sr.ret # number of samples read or the error code
         assert rc == N, 'Error Reading Samples from Device (error code = %d)!' % rc
@@ -161,7 +160,7 @@ def parse_command_line_arguments():
     parser.add_argument('-r', type=float, required=False, dest='fs',
                         default=2e6, help='Sample Rate')
     parser.add_argument('-b', type=float, required=False, dest='bw',
-                        default=18e6, help='Bandwidth')
+                        default=14e6, help='Bandwidth')
     parser.add_argument('-f', type=float, required=False, dest='freq',
                         default=1000e6, help='Frequency')
 
