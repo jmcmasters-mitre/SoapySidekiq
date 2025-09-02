@@ -77,13 +77,11 @@ def main(cardno, rx_chan, fs, bw, freq):
     for i in range(NUM_BUFF):
         print("analyze block", i)
 
-        real = buff[i].real * max_data
-        imag = buff[i].imag * max_data
+        real = (buff[i].real * max_data).astype(np.int16)
+        imag = (buff[i].imag * max_data).astype(np.int16)
 
-        #intbuff[0::2] = real
-        #intbuff[1::2] = imag
-        intbuff[0::2] = imag
-        intbuff[1::2] = real
+        intbuff[0::2] = real
+        intbuff[1::2] = imag
 
         expected = intbuff[0]
 
