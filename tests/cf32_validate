@@ -49,6 +49,8 @@ def main(cardno, rx_chan, fs, bw, freq):
 
     # create a re-usable buffer for receiving samples
     N = sdr.getStreamMTU(rx_stream)
+
+    N = int(N * 7.5) + 1
     print("Stream MTU",  N)
 
     # get the full scale value for this card
