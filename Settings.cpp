@@ -726,12 +726,17 @@ bool SoapySidekiq::getGainMode(const int direction, const size_t channel) const
     return false;
 }
 
-void SoapySidekiq::setGain(const int direction, const size_t channel, const std::string &name, const double value)
+void SoapySidekiq::setGain(const int direction, 
+                           const size_t channel, 
+                           const std::string &name, 
+                           const double value)
 {
     setGain(direction, channel, value);
 }
 
-void SoapySidekiq::setGain(const int direction, const size_t channel, const double value)
+void SoapySidekiq::setGain(const int direction, 
+                           const size_t channel, 
+                           const double value)
 {
     int status = 0;
     SoapySDR_logf(SOAPY_SDR_TRACE, "setGain called with direction %d, channel %zu, value %.1f", direction, channel, value);
@@ -754,7 +759,9 @@ void SoapySidekiq::setGain(const int direction, const size_t channel, const doub
         // 2. Force manual mode if currently in auto
         if (gain_mode == skiq_rx_gain_auto)
         {
-            SoapySDR_logf(SOAPY_SDR_INFO, "Gain mode was auto, switching to manual for explicit gain setting.");
+            SoapySDR_logf(SOAPY_SDR_INFO, 
+                "Gain mode was auto, switching to manual for explicit gain setting.");
+
             status = skiq_write_rx_gain_mode(card, this->rx_hdl, skiq_rx_gain_manual);
             if (status != 0)
             {
@@ -788,14 +795,18 @@ void SoapySidekiq::setGain(const int direction, const size_t channel, const doub
                 gain_index = (uint8_t)std::round(value); // 1dB/step, 0..76
                 break;
             case skiq_x4:
+            case skiq_x40:
             case skiq_x2:
                 gain_index = (uint8_t)(195 + std::round(value * 2.0)); // 0.5dB/step, starts at 195
                 break;
             case skiq_nv100:
+            case skiq_nvm2:
                 gain_index = (uint8_t)(187 + std::round(value * 2.0)); // 0.5dB/step, starts at 187
                 break;
             default:
-                SoapySDR_logf(SOAPY_SDR_WARNING, "Unknown card type: %u. Not setting gain.", (uint8_t)part);
+                SoapySDR_logf(SOAPY_SDR_WARNING, 
+                        "Unknown card type: %u. Not setting gain.", 
+                        (uint8_t)part);
                 return;
         }
 
@@ -804,8 +815,10 @@ void SoapySidekiq::setGain(const int direction, const size_t channel, const doub
         if (gain_index > gain_max) gain_index = gain_max;
 
         SoapySDR_logf(SOAPY_SDR_INFO,
-            "card: %u, handle: %u, Set RX gain: requested %.1f dB (gain_index: %u), range: [%u-%u], set: %u",
-            card, this->rx_hdl, value, gain_index, gain_min, gain_max, gain_index);
+            "card: %u, handle: %u, Set RX gain: requested %.1f dB (gain_index: %u)," 
+            " range: [%u-%u], set: %u",
+            card, this->rx_hdl, value, gain_index, 
+            gain_min, gain_max, gain_index);
 
         // 6. Actually set the gain
         status = skiq_write_rx_gain(card, rx_hdl, gain_index);
@@ -819,7 +832,6 @@ void SoapySidekiq::setGain(const int direction, const size_t channel, const doub
     }
     else if (direction == SOAPY_SDR_TX)
     {
-        // For completeness, update TX as you already do...
         uint16_t attenuation_index = 0;
         uint32_t max_attenuation_index = this->param.tx_param[tx_hdl].atten_quarter_db_max;
 
@@ -833,7 +845,8 @@ void SoapySidekiq::setGain(const int direction, const size_t channel, const doub
                 if ((value < 0) || (value > 89.75))
                 {
                     SoapySDR_logf(SOAPY_SDR_WARNING,
-                        "card: %u, invalid requested attenuation: %3.0f dB, acceptable range: 0 - 89.75 dB. No attenuation configured.",
+                        "card: %u, invalid requested attenuation: %3.0f dB," 
+                        "acceptable range: 0 - 89.75 dB. No attenuation configured.",
                         card, value);
                     return;
                 }
@@ -841,8 +854,10 @@ void SoapySidekiq::setGain(const int direction, const size_t channel, const doub
                 break;
 
             case skiq_x4:
+            case skiq_x40:
             case skiq_x2:
             case skiq_nv100:
+            case skiq_nvm2:
                 if ((value < 0) || (value > 41.75))
                 {
                     SoapySDR_logf(SOAPY_SDR_WARNING,
@@ -908,11 +923,15 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
                 return static_cast<double>(gain_index); // 1dB/step
             case skiq_x2:
             case skiq_x4:
+            case skiq_x40:
                 return static_cast<double>(gain_index - 195) / 2.0; // 0.5dB/step
             case skiq_nv100:
+            case skiq_nvm2:
                 return static_cast<double>(gain_index - 187) / 2.0;
             default:
-                SoapySDR_logf(SOAPY_SDR_WARNING, "card: %u, invalid card type %u", card, (uint8_t)part);
+                SoapySDR_logf(SOAPY_SDR_WARNING, 
+                              "card: %u, invalid card type %u", 
+                              card, (uint8_t)part);
                 break;
         }
     }
@@ -921,7 +940,9 @@ double SoapySidekiq::getGain(const int direction, const size_t channel) const
         uint16_t attenuation_index = 0;
         uint32_t max_attenuation_index = this->param.tx_param[tx_hdl].atten_quarter_db_max;
 
-        status = skiq_read_tx_attenuation(card, tx_hdl, &attenuation_index);
+        status = skiq_read_tx_attenuation(card, 
+                                          static_cast<skiq_tx_hdl_t>(channel), 
+                                          &attenuation_index);
         if (status != 0)
         {
             SoapySDR_logf(SOAPY_SDR_ERROR,
@@ -979,6 +1000,7 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
             // 195 to 255 [0 to 30 dB, 0.5 dB/step]
             case skiq_x2:
             case skiq_x4:
+            case skiq_x40:
                 gain_min = 0;
                 gain_max = 30;
                 step = 0.5;
@@ -986,6 +1008,7 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
 
             // 187 to 255 [0 to 34 dB, 0.5 dB/step]
             case skiq_nv100:
+            case skiq_nvm2:
                 gain_min = 0;
                 gain_max = 34;
                 step = 0.5;
@@ -1020,7 +1043,9 @@ SoapySDR::Range SoapySidekiq::getGainRange(const int    direction,
 
             case skiq_x2:
             case skiq_x4:
+            case skiq_x40:
             case skiq_nv100:
+            case skiq_nvm2:
                 attenuation_max = 41.75;
                 attenuation_step = 0.25;
                 break;
@@ -1477,6 +1502,13 @@ void SoapySidekiq::setBandwidth(const int direction, const size_t channel,
     }
 }
 
+/***********************************************************
+ * Some open source call listSampleRates and want a list of available 
+ * sample rates.  For AD9361 cards, these have contiguous sample rates 
+ * available.
+ * For other cards, there are profiles and there are only specific rates available
+ * For now we will just give a list of min-max, with steps of 250k Hz.
+ */
 std::vector<double> SoapySidekiq::listSampleRates(const int direction, const size_t channel) const {
   std::vector<double> results;
 
