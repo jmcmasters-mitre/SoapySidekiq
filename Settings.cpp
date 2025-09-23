@@ -1743,6 +1743,36 @@ std::string SoapySidekiq::readSetting(const std::string &key) const
     {
         return std::to_string((uint64_t)this->sys_freq);
     }
+    else if (equalsIgnoreCase(key, "overload"))
+    {
+        uint8_t overload_state = 0;
+        int32_t status = skiq_read_rx_overload_state(this->card,
+                                                     this->rx_hdl,
+                                                     &overload_state);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                          "skiq_read_rx_overload_state failed, card: %u status: %d",
+                          this->card, status);
+            throw std::runtime_error("");
+        }
+        return std::to_string(overload_state);
+    }
+    else if (equalsIgnoreCase(key, "cal_offset"))
+    {
+        double cal_offset = 0;
+        int32_t status = skiq_read_rx_cal_offset(this->card,
+                                                     this->rx_hdl,
+                                                     &cal_offset);
+        if (status != 0)
+        {
+            SoapySDR_logf(SOAPY_SDR_ERROR,
+                          "skiq_read_rx_cal_offset failed, card: %u status: %d",
+                          this->card, status);
+            throw std::runtime_error("");
+        }
+        return std::to_string(cal_offset);
+    }
     else
     {
         SoapySDR_logf(SOAPY_SDR_WARNING, "readSetting invalide key '%s'", key.c_str());

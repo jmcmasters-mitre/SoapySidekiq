@@ -35,9 +35,9 @@ sample_queue = []
 def getBlocks(N, rx_stream):
     global running, sample_queue, max_qsize, getBlockId, write_idx
 
-    buff = np.empty(2*N, dtype=np.int16)
     getBlockId = threading.get_native_id()
     write_idx = 0
+    buff = np.empty(2*N, dtype=np.int16)
 
     while running:
         if DEBUG:
@@ -55,7 +55,7 @@ def getBlocks(N, rx_stream):
 
         write_idx += 1
 
-def recordBlocks(fp):
+def recordBlocks():
     global running, sample_queue, recordId, read_idx
 
     recordId = threading.get_native_id()
@@ -66,10 +66,8 @@ def recordBlocks(fp):
                 print("recordBlocks", len(sample_queue))
 
             block = sample_queue.pop(0)
-            if read_idx  == 0:
-                print(block)
 
-            fp.write(block)
+#            fp.write(block)
             read_idx += 1
         time.sleep(2/1000)
 
@@ -107,11 +105,8 @@ def main(cardno, rx_chan, fs, bw, freq):
     N = 2*N
     print("Stream MTU",  N)
 
-
-    filepointer = open("samples.bin", "wb")
-
     getblocks = threading.Thread(target=getBlocks, name='ThreadGet',args=(N,rx_stream, ))
-    recordblocks = threading.Thread(target=recordBlocks, name='ThreadRecord',args=(filepointer,))
+    recordblocks = threading.Thread(target=recordBlocks, name='ThreadRecord')
 
     sdr.activateStream(rx_stream)  # this turns the radio on
 
@@ -128,13 +123,9 @@ def main(cardno, rx_chan, fs, bw, freq):
         time.sleep(3)
         time_ctr += 3
         try:
-            file_size = os.path.getsize(path)
-            print(f"file size {file_size:,} bytes, max_qsize: {max_qsize}, writeindex: {write_idx:,}, readindex: {read_idx:,}" )
-            print(f"file size {file_size:,} bytes, samples/sec {int(file_size/4 /time_ctr):,}, curr_q_size {write_idx - read_idx}")
+            print(f"sample_rate {(int((read_idx * N) / time_ctr)):,}, read_idx {read_idx}, time_ctr {time_ctr}")
+            #print(f"max_qsize: {max_qsize}, writeindex: {write_idx:,}, readindex: {read_idx:,}" )
 
-        except FileNotFoundError:
-            print("File not found.")
-            running = False;
         except OSError:
             print("OS error occurred.")
             running = False;
@@ -160,7 +151,7 @@ def parse_command_line_arguments():
     parser.add_argument('-r', type=float, required=False, dest='fs',
                         default=2e6, help='Sample Rate')
     parser.add_argument('-b', type=float, required=False, dest='bw',
-                        default=14e6, help='Bandwidth')
+                        default=18e6, help='Bandwidth')
     parser.add_argument('-f', type=float, required=False, dest='freq',
                         default=1000e6, help='Frequency')
 
